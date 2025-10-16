@@ -1961,24 +1961,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
 
-        // --- Modify updateButtonStates ---
-         function updateButtonStates() {
-             // ... (connection button logic) ...
-
-             // Action buttons depend on method and files/connection
-             const canFlash = connected && hasFirmwareFilesSelected();
-             if (flashButton) flashButton.disabled = !canFlash;
-             if (eraseButton) eraseButton.disabled = !connected;
-             if (eraseButton) eraseButton.disabled = !connected;
-
-             // ... (connection settings logic) ...
-
-             // Enable "Continue" (Next to Step 3) only if a method is selected AND files are ready
-             if (nextToStep3Button) nextToStep3Button.disabled = !hasFirmwareFilesSelected();
-
-             // ... (rest of button logic) ...
-         }
-
         // --- Modify startOver button ---
          startOverButton.addEventListener('click', () => {
              selectFirmwareMethod(null); // Reset the primary choice
