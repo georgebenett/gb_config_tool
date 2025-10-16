@@ -6,22 +6,22 @@ document.addEventListener('DOMContentLoaded', () => {
             // Add gravity effect to title
             titleToggle.style.transition = 'all 0.5s ease';
             titleToggle.style.transform = 'translateY(10px)';
-            
+
             // Toggle dark mode class
             document.documentElement.classList.toggle('dark-mode');
-            
+
             // Apply gravity effect
             setTimeout(() => {
                 titleToggle.style.transform = 'translateY(0)';
             }, 100);
-            
+
             // Reset transition
             setTimeout(() => {
                 titleToggle.style.transition = '';
             }, 600);
         });
     }
-    
+
     window.addEventListener("dragover", (event) => {
         if (!event.target.closest('.custom-file-upload')) return;
         event.preventDefault();
@@ -63,7 +63,6 @@ document.addEventListener('DOMContentLoaded', () => {
         const disconnectButton = getElementById('disconnectButton');
         const flashButton = getElementById('flashButton');
         const eraseButton = getElementById('eraseButton');
-        const resetButton = getElementById('resetButton');
         const terminalElem = getElementById('terminal');
         const terminalContainer = getElementById('terminal-container');
         const chipInfoElem = getElementById('chipInfo');
@@ -80,6 +79,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const flashFreqSelect = getElementById('flashFreq');
         const flashSizeSelect = getElementById('flashSize');
         const eraseAllCheckbox = getElementById('eraseAll');
+        const preserveRemoteSettingsCheckbox = getElementById('preserveRemoteSettings');
         const appFileInput = getElementById('appFile');
         const bootloaderFileInput = getElementById('bootloaderFile');
         const partitionFileInput = getElementById('partitionFile');
@@ -91,7 +91,6 @@ document.addEventListener('DOMContentLoaded', () => {
         const partitionAddressInput = getElementById('partitionAddress');
         const ghostEspDownloadSection = getElementById('ghostEspDownloadSection');
         const manualUploadSection = getElementById('manualUploadSection');
-        const downloadGbRemoteBtn = getElementById('downloadGbRemoteBtn');
         const choiceDownloadCard = getElementById('choiceDownload');
         const choiceManualCard = getElementById('choiceManual');
         const downloadOptionsContainer = getElementById('downloadOptionsContainer');
@@ -291,7 +290,6 @@ document.addEventListener('DOMContentLoaded', () => {
         disconnectButton.addEventListener('click', disconnect);
         flashButton.addEventListener('click', flash);
         eraseButton.addEventListener('click', eraseFlash);
-        resetButton.addEventListener('click', resetDevice);
 
         if (appFirmwareSection) {
             const appDropZone = appFirmwareSection.querySelector('.custom-file-upload');
@@ -432,7 +430,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             // Check based on the *selected method*
             if (selectedFirmwareMethod === 'download' && extractedGhostEspFiles) {
-                // Use extracted GhostESP data 
+                // Use extracted GhostESP data
                  if (extractedGhostEspFiles.app.data) {
                      const address = extractedGhostEspFiles.app.addressInput.value;
                      addSummaryItem('bi-file-earmark-binary', `Application: ${extractedGhostEspFiles.app.name} at ${address} [Auto]`);
@@ -449,7 +447,7 @@ document.addEventListener('DOMContentLoaded', () => {
                      hasBinaries = true;
                  }
             } else if (selectedFirmwareMethod === 'manual') {
-                // Use manual inputs 
+                // Use manual inputs
                  if (appFileInput?.files?.length > 0) {
                     const file = appFileInput.files[0];
                     const address = appAddressInput.value;
@@ -473,15 +471,19 @@ document.addEventListener('DOMContentLoaded', () => {
             // --- The rest of the function is fine ---
             if (!hasBinaries) {
                 flashSummaryElem.innerHTML = '<div class="summary-item text-warning"><i class="bi bi-exclamation-triangle me-2"></i> Select method and provide firmware</div>';
-                if (flashButton) flashButton.disabled = true; 
+                if (flashButton) flashButton.disabled = true;
             } else {
-                 if (flashButton) flashButton.disabled = !connected; 
+                 if (flashButton) flashButton.disabled = !connected;
             }
             addSummaryItem('bi-gear', `Settings: ${flashModeSelect.value.toUpperCase()}, ${flashFreqSelect.value}, ${flashSizeSelect.value}`);
             if (eraseAllCheckbox.checked) {
-                addSummaryItem('bi-eraser-fill text-warning', '<strong>Erase all flash before programming</strong>');
+                if (preserveRemoteSettingsCheckbox.checked) {
+                    addSummaryItem('bi-shield-check text-success', '<strong>Flash factory app only (preserving NVS & SPIFFS)</strong>');
+                } else {
+                    addSummaryItem('bi-eraser-fill text-warning', '<strong>Erase all flash before programming</strong>');
+                }
             }
-             updateButtonStates(); 
+             updateButtonStates();
         }
 
         function hasFirmwareFilesSelected() {
@@ -500,7 +502,7 @@ document.addEventListener('DOMContentLoaded', () => {
              }
              return false; // No method selected yet
         }
-        
+
         async function connect() {
             if (!selectedDevice) {
                 espLoaderTerminal.writeLine("Please select a device type first");
@@ -512,7 +514,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             try {
                 espLoaderTerminal.writeLine(`Requesting WebSerial port. Select your device from the popup...`);
-                
+
                 // --- Serial Options ---
                 let serialOptions = {}; // No filters - show all devices
 
@@ -598,7 +600,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 updateStatusIndicator('error', statusIndicatorTitle, statusIndicatorDetails); // Update status indicator with appropriate details
             }
         }
-        
+
         async function disconnect() {
             if (transport && espLoader) {
                 try {
@@ -622,7 +624,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (nextToStep3Button) nextToStep3Button.disabled = true;
             return true;
         }
-        
+
         async function flash() {
             if (!connected || !espLoader) {
                 espLoaderTerminal.writeLine("Not connected to a device");
@@ -645,7 +647,6 @@ document.addEventListener('DOMContentLoaded', () => {
             flashButton.disabled = true;
             eraseButton.disabled = true;
             disconnectButton.disabled = true;
-            if (resetButton) resetButton.disabled = true; // Disable reset during flash too
 
             let flashStartTime = null; // Variable to store flash start time
 
@@ -657,15 +658,21 @@ document.addEventListener('DOMContentLoaded', () => {
                 // --- Start: Erase Logic Update ---
                 let eraseSuccessful = true; // Assume success if not erasing
                 if (eraseAllCheckbox.checked) {
-                    espLoaderTerminal.writeLine("Erase requested before flashing. This may take a moment...");
-                    updateStatusIndicator('flashing', 'Erasing flash...', 'This may take a moment...');
-                    try {
-                        await eraseFlashInternal(); // Await the erase operation
-                    } catch (eraseError) {
-                        espLoaderTerminal.writeLine(`❌ Erase failed: ${eraseError.message}. Aborting flash operation.`);
-                        chipInfoElem.innerHTML = `<span class="status-indicator status-error"></span> Erase Failed`;
-                        updateStatusIndicator('error', 'Erase Failed', eraseError.message);
-                        eraseSuccessful = false; // Mark erase as failed
+                    // Check if we should preserve remote settings
+                    if (preserveRemoteSettingsCheckbox && preserveRemoteSettingsCheckbox.checked) {
+                        espLoaderTerminal.writeLine("Preserve Remote Settings enabled - skipping erase, will flash factory app only");
+                        updateStatusIndicator('flashing', 'Skipping erase...', 'Preserving NVS & SPIFFS');
+                    } else {
+                        espLoaderTerminal.writeLine("Erase requested before flashing. This may take a moment...");
+                        updateStatusIndicator('flashing', 'Erasing flash...', 'This may take a moment...');
+                        try {
+                            await eraseFlashInternal(); // Await the erase operation
+                        } catch (eraseError) {
+                            espLoaderTerminal.writeLine(`❌ Erase failed: ${eraseError.message}. Aborting flash operation.`);
+                            chipInfoElem.innerHTML = `<span class="status-indicator status-error"></span> Erase Failed`;
+                            updateStatusIndicator('error', 'Erase Failed', eraseError.message);
+                            eraseSuccessful = false; // Mark erase as failed
+                        }
                     }
                 } else {
                     espLoaderTerminal.writeLine("Skipping erase step as checkbox is not checked.");
@@ -690,6 +697,14 @@ document.addEventListener('DOMContentLoaded', () => {
                     for (const key in extractedGhostEspFiles) {
                         const fileInfo = extractedGhostEspFiles[key];
                         if (fileInfo.data) {
+                            // Skip bootloader and partition if preserve is enabled
+                            if (preserveRemoteSettingsCheckbox && preserveRemoteSettingsCheckbox.checked) {
+                                if (key === 'bootloader' || key === 'partition') {
+                                    espLoaderTerminal.writeLine(`Skipping ${fileInfo.name} (preserving existing bootloader/partition)`);
+                                    continue;
+                                }
+                            }
+
                             const flashAddress = parseInt(fileInfo.addressInput.value, 16);
                             // Convert ArrayBuffer to the binary string esptool.js expects
                             const uint8Data = new Uint8Array(fileInfo.data);
@@ -697,7 +712,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             for (let i = 0; i < uint8Data.length; i++) {
                                 binaryString += String.fromCharCode(uint8Data[i]);
                             }
-                            
+
                             fileArray.push({
                                 data: binaryString,
                                 address: flashAddress,
@@ -717,6 +732,14 @@ document.addEventListener('DOMContentLoaded', () => {
                     [partitionFileInput, partitionAddressInput, 'Partition']
                 ]) {
                         if (inputElem?.files?.length > 0) {
+                        // Skip bootloader and partition if preserve is enabled
+                        if (preserveRemoteSettingsCheckbox && preserveRemoteSettingsCheckbox.checked) {
+                            if (fileType === 'Bootloader' || fileType === 'Partition') {
+                                espLoaderTerminal.writeLine(`Skipping ${fileType} (preserving existing bootloader/partition)`);
+                                continue;
+                            }
+                        }
+
                         const file = inputElem.files[0];
                         const firmware = await file.arrayBuffer();
                         const flashAddress = parseInt(addressInput.value, 16);
@@ -743,7 +766,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (fileArray.length === 0) {
                      espLoaderTerminal.writeLine("❌ No firmware data found to flash.");
                      updateButtonStates();
-                     return; 
+                     return;
                 }
 
                 fileArray.sort((a, b) => a.address - b.address);
@@ -755,8 +778,8 @@ document.addEventListener('DOMContentLoaded', () => {
                  // Determine correct offset based on chip type (add ESP32-C2 etc. if needed)
                 if (chipType.includes("ESP32-S3") ||
                     chipType.includes("ESP32-C3") ||
-                     chipType.includes("ESP32-C6") || 
-                     chipType.includes("ESP32-H2") || 
+                     chipType.includes("ESP32-C6") ||
+                     chipType.includes("ESP32-H2") ||
                      chipType.includes("ESP32-C2")) { // Assuming C2/H2 also use 0x0
                     correctBootloaderOffset = 0x0;
                  } else if (chipType.includes("ESP32-P4") || chipType.includes("ESP32-C5")) { // User provided 0x2000
@@ -800,7 +823,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         const percentage = Math.floor((written / total) * 100);
                         flashProgressElem.style.width = `${percentage}%`;
                         // Use the name stored in our fileArray object
-                        const fileName = fileArray[fileIndex] ? fileArray[fileIndex].name : `File ${fileIndex + 1}`; 
+                        const fileName = fileArray[fileIndex] ? fileArray[fileIndex].name : `File ${fileIndex + 1}`;
                         espLoaderTerminal.writeLine(`Flashing ${fileName}: ${percentage}% (${written}/${total} bytes)`);
 
                         // Calculate and display ETA
@@ -879,20 +902,16 @@ document.addEventListener('DOMContentLoaded', () => {
                     const actionButtons = document.querySelector('.action-buttons');
                     if (actionButtons) {
                          actionButtons.innerHTML = `
-                             <button id="flashButton" class="btn btn-primary">
+                             <button id="flashButton" class="btn btn-success">
                                  <i class="bi bi-lightning"></i> Flash Firmware
                              </button>
-                             <button id="eraseButton" class="btn btn-danger">
+                             <button id="eraseButton" class="btn btn-warning">
                                  <i class="bi bi-trash"></i> Erase Flash
-                             </button>
-                             <button id="resetButton" class="btn btn-secondary">
-                                 <i class="bi bi-arrow-repeat"></i> Reset Device
                              </button>
                          `;
                          // Reattach event listeners
                         document.getElementById('flashButton').addEventListener('click', flash);
                         document.getElementById('eraseButton').addEventListener('click', eraseFlash);
-                        document.getElementById('resetButton').addEventListener('click', resetDevice);
                         // Add back the disconnect button which is missing now
                         // Need to decide if disconnect should be present after flashing+reset attempt
                         // Let's assume yes, but it might not work if the device truly reset
@@ -922,7 +941,7 @@ document.addEventListener('DOMContentLoaded', () => {
                  updateButtonStates();
             }
         }
-        
+
         // Replace the calculateMd5 function with this simpler version
         function calculateMd5Hash(image) {
             // Just return null to use the built-in CRC verification
@@ -956,13 +975,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 espLoaderTerminal.writeLine("Flash erased successfully");
                 chipInfoElem.innerHTML = `<span class="status-indicator status-connected"></span> Flash erased`;
                 updateStatusIndicator('success', 'Flash erased', 'Ready to flash firmware');
-                
+
                 // --- Update Global Indicator on Success ---
                 if (globalStatusIndicator) {
                     globalStatusIndicator.textContent = '✅ Flash erased successfully.';
                     globalStatusIndicator.className = 'alert alert-success mt-3'; // Change to success style
                     // Optional: Hide after a delay
-                    setTimeout(() => globalStatusIndicator.classList.add('d-none'), 3000); 
+                    setTimeout(() => globalStatusIndicator.classList.add('d-none'), 3000);
                 }
 
                 return true; // Indicate success
@@ -971,17 +990,17 @@ document.addEventListener('DOMContentLoaded', () => {
                 espLoaderTerminal.writeLine(`Error erasing flash: ${error.message}`);
                 chipInfoElem.innerHTML = `<span class="status-indicator status-disconnected"></span> Erase failed`;
                 updateStatusIndicator('error', 'Erase failed', error.message);
-                
+
                 // --- Update Global Indicator on Error ---
                  if (globalStatusIndicator) {
                     globalStatusIndicator.textContent = `❌ Error erasing flash: ${error.message}`;
                     globalStatusIndicator.className = 'alert alert-danger mt-3'; // Change to error style
                      // Optional: Hide after a delay
-                    setTimeout(() => globalStatusIndicator.classList.add('d-none'), 5000); 
+                    setTimeout(() => globalStatusIndicator.classList.add('d-none'), 5000);
                  }
 
                 throw error; // Rethrow the error to be caught by the caller if needed
-            } 
+            }
             // --- REMOVED finally block for hiding indicator here, handled in success/error ---
         }
 
@@ -995,7 +1014,6 @@ document.addEventListener('DOMContentLoaded', () => {
             // Disable buttons during erase
             eraseButton.disabled = true;
             flashButton.disabled = true;
-            if (resetButton) resetButton.disabled = true; // Disable reset during erase
 
             try {
                 // The indicator is now managed within eraseFlashInternal
@@ -1009,60 +1027,20 @@ document.addEventListener('DOMContentLoaded', () => {
                 updateButtonStates();
             }
         }
-        
-        async function resetDevice() {
-            if (!connected || !espLoader) {
-                espLoaderTerminal.writeLine("Not connected to a device");
-                return;
-            }
 
-            // Disable reset button during operation
-            if(resetButton) resetButton.disabled = true;
 
-            try {
-                espLoaderTerminal.writeLine("Attempting soft reset (into app)...");
-                chipInfoElem.innerHTML = `<span class="status-indicator status-flashing"></span> Resetting...`;
-                updateStatusIndicator('flashing', 'Resetting...', '');
-
-                // --- CHANGE: Use softReset(true) ---
-                await espLoader.softReset(true);
-                espLoaderTerminal.writeLine("Soft reset command sent.");
-                // --- End Change ---
-
-                chipInfoElem.innerHTML = `<span class="status-indicator status-connected"></span> Device reset initiated`;
-                updateStatusIndicator('success', 'Reset initiated', 'Device should restart');
-
-                // Assume connection is lost after reset attempt
-                setTimeout(() => {
-                     connected = false;
-                     updateButtonStates();
-                     chipInfoElem.innerHTML = `<span class="status-indicator status-disconnected"></span> Reset attempted, likely disconnected`;
-                     updateStatusIndicator('disconnected', 'Disconnected', 'Device reset attempted');
-                 }, 1000);
-
-            } catch (error) {
-                console.error("Soft reset failed:", error);
-                espLoaderTerminal.writeLine(`Note: Soft reset failed: ${error.message}. Manual reset may be required.`);
-                chipInfoElem.innerHTML = `<span class="status-indicator status-warning"></span> Reset command failed`;
-                updateStatusIndicator('error', 'Reset Failed', error.message);
-                 // Re-enable button only if the command fails immediately
-                 if (!connected && resetButton) resetButton.disabled = false; // Should be disconnected by timeout anyway
-                 else if (connected && resetButton) resetButton.disabled = !connected; // Re-enable based on actual state if timeout hasn't fired
-            }
-        }
-        
         function updateButtonStates() {
             // Connection buttons
             if (connectButton) connectButton.disabled = connected;
             if (disconnectButton) disconnectButton.disabled = !connected;
-            
+
             // Action buttons depend on method and files/connection
             // Call hasFirmwareFilesSelected safely here
-            const canFlash = connected && hasFirmwareFilesSelected(); 
+            const canFlash = connected && hasFirmwareFilesSelected();
             if (flashButton) flashButton.disabled = !canFlash;
             if (eraseButton) eraseButton.disabled = !connected;
-            if (resetButton) resetButton.disabled = !connected;
-            
+            if (eraseButton) eraseButton.disabled = !connected;
+
             // Connection settings
             // if (baudrateSelect) baudrateSelect.disabled = connected;
             // if (resetMethodSelect) resetMethodSelect.disabled = connected;
@@ -1070,14 +1048,14 @@ document.addEventListener('DOMContentLoaded', () => {
             // Disable next step buttons based on state
             if (nextToStep3Button) nextToStep3Button.disabled = !connected;
             // Call hasFirmwareFilesSelected safely here
-            if (nextToStep4Button) nextToStep4Button.disabled = !hasFirmwareFilesSelected(); 
+            if (nextToStep4Button) nextToStep4Button.disabled = !hasFirmwareFilesSelected();
         }
-        
+
         // Check if WebSerial is supported
         if (!navigator.serial) {
             espLoaderTerminal.writeLine("WebSerial is not supported in this browser. Please use Chrome or Edge version 89 or later.");
             connectButton.disabled = true;
-            
+
             // Create and show a modal popup with dark theme styling
             const modalCss = `
                 <style>
@@ -1089,7 +1067,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                 </style>
             `;
-            
+
             const modalHtml = `
             ${modalCss}
             <div class="modal fade" id="webSerialModal" tabindex="-1" aria-hidden="true" style="z-index: 10002;">
@@ -1119,17 +1097,17 @@ document.addEventListener('DOMContentLoaded', () => {
                     </div>
                 </div>
             </div>`;
-            
+
             // Append modal to body
             document.body.insertAdjacentHTML('beforeend', modalHtml);
-            
+
             // Show the modal
             const webSerialModal = new bootstrap.Modal(getElementById('webSerialModal'));
             webSerialModal.show();
         } else {
             espLoaderTerminal.writeLine("GB Remote Config Tool ready. Please select your device type.");
         }
-        
+
         // Initialize the UI
         goToStep(1);
 
@@ -1339,7 +1317,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         latestPrerelease = release;
                     }
                      // Optimization: stop if we found both
-                     if (latestStableRelease && latestPrerelease) break; 
+                     if (latestStableRelease && latestPrerelease) break;
                 }
 
                 let optionsAdded = false;
@@ -1397,10 +1375,10 @@ document.addEventListener('DOMContentLoaded', () => {
         async function loadGhostEspZip(zipUrl) {
             console.log(`[Debug] loadGhostEspZip called with original URL: ${zipUrl}`); // Log original URL
             if (!zipUrl) {
-                console.log('[Debug] loadGhostEspZip: No URL provided, clearing data.'); 
-                extractedGhostEspFiles = null; 
-                updateBinaryTypeIndicators(); 
-                updateFlashSummary(); 
+                console.log('[Debug] loadGhostEspZip: No URL provided, clearing data.');
+                extractedGhostEspFiles = null;
+                updateBinaryTypeIndicators();
+                updateFlashSummary();
                 updateButtonStates();
                 return;
             }
@@ -1410,18 +1388,18 @@ document.addEventListener('DOMContentLoaded', () => {
             const proxyUrl = `https://fragrant-flower-ba0b.creepersbeast.workers.dev/?url=${encodeURIComponent(zipUrl)}`; // UPDATED with your worker URL
             console.log(`[Debug] Using CF Worker proxy URL: ${proxyUrl}`); // Log proxy URL
             espLoaderTerminal.writeLine(`Fetching GhostESP firmware via proxy from ${zipUrl}...`);
-            
-            // Disable download button during processing
-            if (downloadGbRemoteBtn) downloadGbRemoteBtn.disabled = true; 
 
-            extractedGhostEspFiles = null; 
+            // Disable download during processing
+            if (choiceDownloadCard) choiceDownloadCard.style.pointerEvents = 'none';
+
+            extractedGhostEspFiles = null;
 
             try {
-                console.log('[Debug] loadGhostEspZip: Starting fetch via proxy...'); 
+                console.log('[Debug] loadGhostEspZip: Starting fetch via proxy...');
                 // --- Fetch using the proxy URL ---
-                const response = await fetch(proxyUrl); 
-                console.log(`[Debug] loadGhostEspZip: Fetch response status: ${response.status}, ok: ${response.ok}`); 
-                
+                const response = await fetch(proxyUrl);
+                console.log(`[Debug] loadGhostEspZip: Fetch response status: ${response.status}, ok: ${response.ok}`);
+
                 // Check if the proxy itself had an issue or if the proxied request failed
                 if (!response.ok) {
                     // Try to get error details from the proxy response if available
@@ -1441,11 +1419,11 @@ document.addEventListener('DOMContentLoaded', () => {
                          }
                     } catch (e) { /* Ignore errors reading body */ }
                      console.error(`[Debug] Proxy fetch error: ${proxyErrorDetails}`);
-                     throw new Error(proxyErrorDetails); 
+                     throw new Error(proxyErrorDetails);
                 }
-                
+
                 const zipBlob = await response.blob();
-                console.log(`[Debug] loadGhostEspZip: Downloaded Blob size: ${zipBlob.size}`); 
+                console.log(`[Debug] loadGhostEspZip: Downloaded Blob size: ${zipBlob.size}`);
                 if (zipBlob.size === 0) {
                     throw new Error("Downloaded ZIP file is empty. Proxy or original link might be broken.");
                 }
@@ -1462,10 +1440,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 espLoaderTerminal.writeLine(`Downloaded ${Math.round(zipBlob.size / 1024)} KB ZIP. Extracting...`);
 
-                console.log('[Debug] loadGhostEspZip: Loading ZIP with JSZip...'); 
+                console.log('[Debug] loadGhostEspZip: Loading ZIP with JSZip...');
                 const zip = await JSZip.loadAsync(zipBlob);
-                console.log('[Debug] loadGhostEspZip: JSZip loaded successfully.'); 
-                
+                console.log('[Debug] loadGhostEspZip: JSZip loaded successfully.');
+
                 // --- Files to extract ---
                 const filesToExtract = {
                     app: { name: 'Ghost_ESP_IDF.bin', data: null, elem: appFileInfoElem, addressInput: appAddressInput, type: 'Application' }, // Corrected name
@@ -1474,14 +1452,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 };
 
                 let foundCount = 0;
-                console.log('[Debug] loadGhostEspZip: Starting file extraction loop...'); 
+                console.log('[Debug] loadGhostEspZip: Starting file extraction loop...');
                 for (const key in filesToExtract) {
                     const target = filesToExtract[key];
                     console.log(`[Debug] loadGhostEspZip: Checking for file: ${target.name}`);
-                    
+
                     // Try the primary name first
                     let fileEntry = zip.file(target.name);
-                    
+
                     // If not found, try alternative names for specific file types
                     if (!fileEntry) {
                         if (key === 'app') {
@@ -1492,21 +1470,21 @@ document.addEventListener('DOMContentLoaded', () => {
                             if (fileEntry) target.name = 'partitions.bin';
                         }
                     }
-                    
+
                     if (fileEntry) {
                         console.log(`[Debug] loadGhostEspZip: Found ${target.name}, extracting data...`);
                         target.data = await fileEntry.async("arraybuffer");
                         const fileSizeKB = Math.round(target.data.byteLength / 1024);
-                         console.log(`[Debug] loadGhostEspZip: Extracted ${target.name}, size: ${fileSizeKB} KB. Updating UI...`); 
+                         console.log(`[Debug] loadGhostEspZip: Extracted ${target.name}, size: ${fileSizeKB} KB. Updating UI...`);
                         if (target.elem) {
                              target.elem.textContent = `${target.name} (${fileSizeKB} KB) [Auto-Loaded]`;
                              const dropZone = target.elem.closest('.firmware-section')?.querySelector('.custom-file-upload');
-                             dropZone?.classList.add('file-uploaded'); 
+                             dropZone?.classList.add('file-uploaded');
                         }
                         espLoaderTerminal.writeLine(`Found ${target.name} (${fileSizeKB} KB)`);
                         foundCount++;
                     } else {
-                         console.log(`[Debug] loadGhostEspZip: File not found in ZIP: ${target.name}`); 
+                         console.log(`[Debug] loadGhostEspZip: File not found in ZIP: ${target.name}`);
                          if (target.elem) {
                             target.elem.textContent = 'Not found in ZIP';
                              const dropZone = target.elem.closest('.firmware-section')?.querySelector('.custom-file-upload');
@@ -1515,33 +1493,33 @@ document.addEventListener('DOMContentLoaded', () => {
                          espLoaderTerminal.writeLine(`Warning: ${target.name} not found in the ZIP.`);
                     }
                 }
-                console.log(`[Debug] loadGhostEspZip: Extraction loop finished. Found count: ${foundCount}`); 
+                console.log(`[Debug] loadGhostEspZip: Extraction loop finished. Found count: ${foundCount}`);
 
                 if (foundCount > 0) {
-                     extractedGhostEspFiles = filesToExtract; 
+                     extractedGhostEspFiles = filesToExtract;
                      espLoaderTerminal.writeLine("Extraction complete. Files ready.");
-                     updateBinaryTypeIndicators(); 
-                     updateFlashSummary(); 
+                     updateBinaryTypeIndicators();
+                     updateFlashSummary();
                 } else {
                     // If we downloaded something but didn't find the files, clear UI state
-                     clearExtractedData(); 
+                     clearExtractedData();
                      updateFlashSummary();
                     throw new Error("No required .bin files found in the downloaded ZIP.");
                 }
 
             } catch (error) {
-                console.error("[Debug] Error loading or extracting GhostESP ZIP:", error); 
+                console.error("[Debug] Error loading or extracting GhostESP ZIP:", error);
                 espLoaderTerminal.writeLine(`❌ Error processing GhostESP ZIP: ${error.message}`);
-                extractedGhostEspFiles = null; 
+                extractedGhostEspFiles = null;
                  if (appFileInfoElem) appFileInfoElem.textContent = 'ZIP Load Failed';
                  if (bootloaderFileInfoElem) bootloaderFileInfoElem.textContent = 'ZIP Load Failed';
                  if (partitionFileInfoElem) partitionFileInfoElem.textContent = 'ZIP Load Failed';
                  document.querySelectorAll('.custom-file-upload.file-uploaded').forEach(el => el.classList.remove('file-uploaded'));
                  updateBinaryTypeIndicators(); // Clear badges on error
             } finally {
-                console.log('[Debug] loadGhostEspZip: Finally block reached. Re-enabling select.'); 
-                 if (downloadGbRemoteBtn) downloadGbRemoteBtn.disabled = false; 
-                updateButtonStates(); 
+                console.log('[Debug] loadGhostEspZip: Finally block reached. Re-enabling select.');
+                 if (choiceDownloadCard) choiceDownloadCard.style.pointerEvents = 'auto';
+                updateButtonStates();
             }
         }
 
@@ -1558,10 +1536,10 @@ document.addEventListener('DOMContentLoaded', () => {
                         linkElement.href = '#'; // Keep link disabled for GhostESP
                         linkElement.classList.add('disabled');
                         linkElement.classList.replace('btn-primary', 'btn-secondary');
-                        
+
                         // Trigger the load function
-                        loadGhostEspZip(selectedValue); 
-                    
+                        loadGhostEspZip(selectedValue);
+
                     // --- Default Handling ---
                     } else {
                         console.log('[Debug] Non-GhostESP select changed.'); // <<< ADD LOG
@@ -1582,13 +1560,13 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         // --- Remove the early call for GhostESP ---
-        // setupDownloadLinkListener(ghostEspVariantSelect, ghostEspDownloadLink);  
-        
+        // setupDownloadLinkListener(ghostEspVariantSelect, ghostEspDownloadLink);
+
 
         // --- THIS BLOCK IS THE CULPRIT - Commenting it out ---
         /*
-        if (firmwareSourceSelect) { 
-            firmwareSourceSelect.addEventListener('change', () => { 
+        if (firmwareSourceSelect) {
+            firmwareSourceSelect.addEventListener('change', () => {
                 const selectedSource = firmwareSourceSelect.value;
                 console.log(`[Debug] Firmware source changed to: ${selectedSource}`); // <<< ADD LOG
 
@@ -1603,7 +1581,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 const allDownloadSections = [ghostEspDownloadSection];
                 // Remove download links logic as GhostESP doesn't use it now
-                // const allDownloadLinks = [ghostEspDownloadLink];  
+                // const allDownloadLinks = [ghostEspDownloadLink];
 
                 manualUploadSection.classList.add('d-none');
                 allDownloadSections.forEach(section => section?.classList.add('d-none'));
@@ -1616,7 +1594,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 } else if (selectedSource === 'ghostesp') {
                      console.log('[Debug] Source is ghostesp, showing section and populating options...'); // <<< ADD LOG
                     ghostEspDownloadSection?.classList.remove('d-none');
-                
+
                 updateFlashSummary(); // Update summary after source change
                 updateButtonStates(); // Update buttons after source change
             });
@@ -1624,8 +1602,8 @@ document.addEventListener('DOMContentLoaded', () => {
             // Trigger change on load IF a device is already selected maybe?
             // Or just let manual be default.
              console.log('[Debug] Dispatching initial change event for firmwareSourceSelect'); // <<< ADD LOG
-            firmwareSourceSelect.dispatchEvent(new Event('change')); 
-        } 
+            firmwareSourceSelect.dispatchEvent(new Event('change'));
+        }
         */ // <<< --- End of commented out block ---
 
         // --- Helper to clear manual file inputs ---
@@ -1645,15 +1623,15 @@ document.addEventListener('DOMContentLoaded', () => {
         function clearExtractedData() {
             if (extractedGhostEspFiles) {
                 // Clear the stored data
-                extractedGhostEspFiles = null; 
+                extractedGhostEspFiles = null;
                 // Optionally clear the UI text if it was set by extraction
                 // Check if the current text indicates it was auto-loaded before clearing
                 if (appFileInfoElem?.textContent.includes('[Auto-Loaded]')) appFileInfoElem.textContent = 'No file selected';
                 if (bootloaderFileInfoElem?.textContent.includes('[Auto-Loaded]')) bootloaderFileInfoElem.textContent = 'No file selected';
                 if (partitionFileInfoElem?.textContent.includes('[Auto-Loaded]')) partitionFileInfoElem.textContent = 'No file selected';
-                // Clear visual indicators 
+                // Clear visual indicators
                 document.querySelectorAll('.custom-file-upload.file-uploaded').forEach(el => el.classList.remove('file-uploaded'));
-                updateBinaryTypeIndicators(); 
+                updateBinaryTypeIndicators();
                 espLoaderTerminal.writeLine("Cleared auto-loaded GhostESP files.");
             }
         }
@@ -1662,15 +1640,15 @@ document.addEventListener('DOMContentLoaded', () => {
         function updateBinaryTypeIndicators() {
             // Clear existing badges first
             document.querySelectorAll('.file-badge').forEach(badge => badge.remove());
-            
+
             // FIX: Use selectedFirmwareMethod instead of the removed firmwareSourceSelect
-            // const source = firmwareSourceSelect.value; 
+            // const source = firmwareSourceSelect.value;
             const method = selectedFirmwareMethod; // Use the current method variable
 
             let hasApp = false, hasBootloader = false, hasPartition = false;
 
             // Check based on the selected method
-            if (method === 'download' && extractedGhostEspFiles) { 
+            if (method === 'download' && extractedGhostEspFiles) {
                 hasApp = !!extractedGhostEspFiles.app.data;
                 hasBootloader = !!extractedGhostEspFiles.bootloader.data;
                 hasPartition = !!extractedGhostEspFiles.partition.data;
@@ -1706,41 +1684,6 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         }
 
-        // Event listener for the download button
-        if (downloadGbRemoteBtn) {
-            downloadGbRemoteBtn.addEventListener('click', async () => {
-                try {
-                    // Get the latest release URL for gb_remote_lite.zip
-                    const apiUrl = 'https://api.github.com/repos/georgebenett/gb_remote/releases/latest';
-                    espLoaderTerminal.writeLine('Fetching latest release from georgebenett/gb_remote...');
-                    
-                    const response = await fetch(apiUrl);
-                    if (!response.ok) {
-                        throw new Error(`GitHub API Error: ${response.status} ${response.statusText}`);
-                    }
-                    
-                    const release = await response.json();
-                    const zipAsset = release.assets.find(asset => asset.name === 'gb_remote_lite.zip');
-                    
-                    if (!zipAsset) {
-                        throw new Error('gb_remote_lite.zip not found in latest release');
-                    }
-                    
-                    espLoaderTerminal.writeLine(`Found gb_remote_lite.zip in release ${release.tag_name}`);
-                    
-                    // Download and extract the ZIP
-                    await loadGhostEspZip(zipAsset.browser_download_url);
-                    
-                } catch (error) {
-                    console.error('Error downloading gb_remote_lite.zip:', error);
-                    espLoaderTerminal.writeLine(`❌ Error downloading firmware: ${error.message}`);
-                    if (ghostEspStatusElem) {
-                        ghostEspStatusElem.textContent = `Error: ${error.message}`;
-                        ghostEspStatusElem.className = 'form-text text-danger mt-2 error';
-                    }
-                }
-            });
-        }
 
         function selectFirmwareMethod(method) {
             selectedFirmwareMethod = method;
@@ -1752,28 +1695,71 @@ document.addEventListener('DOMContentLoaded', () => {
             // Show/hide relevant containers
             downloadOptionsContainer?.classList.toggle('d-none', method !== 'download');
             manualUploadContainer?.classList.toggle('d-none', method !== 'manual');
-            
+
             // Reset state if switching
             if (method === 'download') {
-                clearManualInputs(); 
+                clearManualInputs();
                 // Show download section
                 ghostEspDownloadSection?.classList.remove('d-none');
+
+                // Automatically download and extract files
+                downloadAndExtractFiles();
             } else { // method === 'manual'
                 clearExtractedData();
                 ghostEspDownloadSection?.classList.add('d-none');
                 // Maybe auto-select the 'app' toggle?
                 document.querySelector('.binary-type-toggle .btn[data-binary="app"]')?.click();
             }
-            
+
             updateFlashSummary(); // Update summary based on new state
             updateButtonStates(); // Update buttons
+        }
+
+        // Function to automatically download and extract files
+        async function downloadAndExtractFiles() {
+            try {
+                // Update status
+                if (ghostEspStatusElem) {
+                    ghostEspStatusElem.textContent = 'Fetching latest release from georgebenett/gb_remote...';
+                    ghostEspStatusElem.className = 'form-text mt-2 loading';
+                }
+
+                // Get the latest release URL for gb_remote_lite.zip
+                const apiUrl = 'https://api.github.com/repos/georgebenett/gb_remote/releases/latest';
+                espLoaderTerminal.writeLine('Fetching latest release from georgebenett/gb_remote...');
+
+                const response = await fetch(apiUrl);
+                if (!response.ok) {
+                    throw new Error(`GitHub API Error: ${response.status} ${response.statusText}`);
+                }
+
+                const release = await response.json();
+                const zipAsset = release.assets.find(asset => asset.name === 'gb_remote_lite.zip');
+
+                if (!zipAsset) {
+                    throw new Error('gb_remote_lite.zip not found in latest release');
+                }
+
+                espLoaderTerminal.writeLine(`Found gb_remote_lite.zip in release ${release.tag_name}`);
+
+                // Download and extract the ZIP
+                await loadGhostEspZip(zipAsset.browser_download_url);
+
+            } catch (error) {
+                console.error('Error downloading gb_remote_lite.zip:', error);
+                espLoaderTerminal.writeLine(`❌ Error downloading firmware: ${error.message}`);
+                if (ghostEspStatusElem) {
+                    ghostEspStatusElem.textContent = `Error: ${error.message}`;
+                    ghostEspStatusElem.className = 'form-text text-danger mt-2 error';
+                }
+            }
         }
 
 
 
         // --- Modify loadGhostEspZip to update status element ---
         async function loadGhostEspZip(zipUrl) {
-            console.log(`[Debug] loadGhostEspZip called with original URL: ${zipUrl}`); 
+            console.log(`[Debug] loadGhostEspZip called with original URL: ${zipUrl}`);
             if (!zipUrl) {
                 // ... (rest of the condition)
                  if (ghostEspStatusElem) {
@@ -1790,54 +1776,54 @@ document.addEventListener('DOMContentLoaded', () => {
              }
 
             const proxyUrl = `https://fragrant-flower-ba0b.creepersbeast.workers.dev/?url=${encodeURIComponent(zipUrl)}`;
-            console.log(`[Debug] Using CF Worker proxy URL: ${proxyUrl}`); 
+            console.log(`[Debug] Using CF Worker proxy URL: ${proxyUrl}`);
             espLoaderTerminal.writeLine(`Fetching GhostESP firmware via proxy from ${zipUrl}...`);
-            
-            // Disable download button during processing
-            if (downloadGbRemoteBtn) downloadGbRemoteBtn.disabled = true; 
-            extractedGhostEspFiles = null; 
+
+            // Disable download during processing
+            if (choiceDownloadCard) choiceDownloadCard.style.pointerEvents = 'none';
+            extractedGhostEspFiles = null;
 
             try {
-                console.log('[Debug] loadGhostEspZip: Starting fetch via proxy...'); 
-                const response = await fetch(proxyUrl); 
-                console.log(`[Debug] loadGhostEspZip: Fetch response status: ${response.status}, ok: ${response.ok}`); 
-                
+                console.log('[Debug] loadGhostEspZip: Starting fetch via proxy...');
+                const response = await fetch(proxyUrl);
+                console.log(`[Debug] loadGhostEspZip: Fetch response status: ${response.status}, ok: ${response.ok}`);
+
                 if (!response.ok) {
                     // ... (error handling)
                      if (ghostEspStatusElem) {
                          ghostEspStatusElem.textContent = `Error fetching: ${response.status}`;
                          ghostEspStatusElem.className = 'form-text text-danger mt-2 error';
                      }
-                     throw new Error(proxyErrorDetails); 
+                     throw new Error(proxyErrorDetails);
                 }
-                
+
                  if (ghostEspStatusElem) ghostEspStatusElem.textContent = 'Download complete. Extracting files...';
 
                 const zipBlob = await response.blob();
                 // ... (blob size/type checks) ...
-                
+
                 espLoaderTerminal.writeLine(`Downloaded ${Math.round(zipBlob.size / 1024)} KB ZIP. Extracting...`);
 
-                console.log('[Debug] loadGhostEspZip: Loading ZIP with JSZip...'); 
+                console.log('[Debug] loadGhostEspZip: Loading ZIP with JSZip...');
                 const zip = await JSZip.loadAsync(zipBlob);
-                console.log('[Debug] loadGhostEspZip: JSZip loaded successfully.'); 
-                
+                console.log('[Debug] loadGhostEspZip: JSZip loaded successfully.');
+
                 const filesToExtract = { // Updated filenames for gb_remote
-                    app: { name: 'gb_controller_lite.bin', data: null, elem: appFileInfoElem, addressInput: appAddressInput, type: 'Application' }, 
-                    bootloader: { name: 'bootloader.bin', data: null, elem: bootloaderFileInfoElem, addressInput: bootloaderAddressInput, type: 'Bootloader' }, 
-                    partition: { name: 'partition-table.bin', data: null, elem: partitionFileInfoElem, addressInput: partitionAddressInput, type: 'Partition' } 
+                    app: { name: 'gb_controller_lite.bin', data: null, elem: appFileInfoElem, addressInput: appAddressInput, type: 'Application' },
+                    bootloader: { name: 'bootloader.bin', data: null, elem: bootloaderFileInfoElem, addressInput: bootloaderAddressInput, type: 'Bootloader' },
+                    partition: { name: 'partition-table.bin', data: null, elem: partitionFileInfoElem, addressInput: partitionAddressInput, type: 'Partition' }
                 };
 
                 let foundCount = 0;
                 let foundFilesLog = []; // To log which files were found
-                console.log('[Debug] loadGhostEspZip: Starting file extraction loop...'); 
+                console.log('[Debug] loadGhostEspZip: Starting file extraction loop...');
                 for (const key in filesToExtract) {
                     const target = filesToExtract[key];
                     console.log(`[Debug] loadGhostEspZip: Checking for file: ${target.name}`);
-                    
+
                     // Try the primary name first
                     let fileEntry = zip.file(target.name);
-                    
+
                     // If not found, try alternative names for specific file types
                     if (!fileEntry) {
                         if (key === 'app') {
@@ -1848,12 +1834,12 @@ document.addEventListener('DOMContentLoaded', () => {
                             if (fileEntry) target.name = 'partitions.bin';
                         }
                     }
-                    
+
                     if (fileEntry) {
                         console.log(`[Debug] loadGhostEspZip: Found ${target.name}, extracting data...`);
                         target.data = await fileEntry.async("arraybuffer");
                         const fileSizeKB = Math.round(target.data.byteLength / 1024);
-                         console.log(`[Debug] loadGhostEspZip: Extracted ${target.name}, size: ${fileSizeKB} KB. Updating UI...`); 
+                         console.log(`[Debug] loadGhostEspZip: Extracted ${target.name}, size: ${fileSizeKB} KB. Updating UI...`);
                         if (target.elem) {
                             target.elem.textContent = `${target.name} [Auto-Loaded]`;
                             document.querySelector(`label[for="${target.elem.id.replace('Info', '')}"]`)?.classList.add('file-uploaded');
@@ -1868,19 +1854,19 @@ document.addEventListener('DOMContentLoaded', () => {
                         }
                     }
                 }
-                console.log(`[Debug] loadGhostEspZip: Extraction loop finished. Found count: ${foundCount}`); 
+                console.log(`[Debug] loadGhostEspZip: Extraction loop finished. Found count: ${foundCount}`);
 
                 if (foundCount > 0) {
-                     extractedGhostEspFiles = filesToExtract; 
+                     extractedGhostEspFiles = filesToExtract;
                      espLoaderTerminal.writeLine("Extraction complete. Files ready.");
                       if (ghostEspStatusElem) { // Update status on success
                           ghostEspStatusElem.textContent = `Loaded: ${foundFilesLog.join(', ')}`;
                           ghostEspStatusElem.className = 'form-text text-success mt-2 success';
                       }
-                     updateBinaryTypeIndicators(); 
-                     updateFlashSummary(); 
+                     updateBinaryTypeIndicators();
+                     updateFlashSummary();
                 } else {
-                     clearExtractedData(); 
+                     clearExtractedData();
                      updateFlashSummary();
                       if (ghostEspStatusElem) { // Update status on failure
                          ghostEspStatusElem.textContent = 'Error: No required .bin files found in ZIP.';
@@ -1890,35 +1876,35 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
 
             } catch (error) {
-                console.error("[Debug] Error loading or extracting GhostESP ZIP:", error); 
+                console.error("[Debug] Error loading or extracting GhostESP ZIP:", error);
                 espLoaderTerminal.writeLine(`❌ Error processing GhostESP ZIP: ${error.message}`);
                  if (ghostEspStatusElem) { // Update status on catch
                      ghostEspStatusElem.textContent = `Error: ${error.message}`;
                      ghostEspStatusElem.className = 'form-text text-danger mt-2 error';
                  }
-                extractedGhostEspFiles = null; 
+                extractedGhostEspFiles = null;
                  if (appFileInfoElem) appFileInfoElem.textContent = 'ZIP Load Failed';
                  if (bootloaderFileInfoElem) bootloaderFileInfoElem.textContent = 'ZIP Load Failed';
                  if (partitionFileInfoElem) partitionFileInfoElem.textContent = 'ZIP Load Failed';
                  document.querySelectorAll('.custom-file-upload.file-uploaded').forEach(el => el.classList.remove('file-uploaded'));
                  updateBinaryTypeIndicators(); // Clear badges on error
             } finally {
-                console.log('[Debug] loadGhostEspZip: Finally block reached. Re-enabling select.'); 
-                 if (downloadGbRemoteBtn) downloadGbRemoteBtn.disabled = false; 
-                updateButtonStates(); 
+                console.log('[Debug] loadGhostEspZip: Finally block reached. Re-enabling select.');
+                 if (choiceDownloadCard) choiceDownloadCard.style.pointerEvents = 'auto';
+                updateButtonStates();
             }
         }
 
 
         // --- REMOVE OLD firmwareSourceSelect listener ---
-        /* 
+        /*
         if (firmwareSourceSelect) {
             firmwareSourceSelect.addEventListener('change', () => {
                // ... OLD LOGIC ...
             });
-             console.log('[Debug] Dispatching initial change event for firmwareSourceSelect'); 
-            firmwareSourceSelect.dispatchEvent(new Event('change')); 
-        } 
+             console.log('[Debug] Dispatching initial change event for firmwareSourceSelect');
+            firmwareSourceSelect.dispatchEvent(new Event('change'));
+        }
         */
 
         // --- Modify hasFirmwareFilesSelected ---
@@ -1947,7 +1933,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             // Check based on the *selected method*
             if (selectedFirmwareMethod === 'download' && extractedGhostEspFiles) {
-                // Use extracted GhostESP data 
+                // Use extracted GhostESP data
                  if (extractedGhostEspFiles.app.data) {
                      const address = extractedGhostEspFiles.app.addressInput.value;
                      addSummaryItem('bi-file-earmark-binary', `Application: ${extractedGhostEspFiles.app.name} at ${address} [Auto]`);
@@ -1964,7 +1950,7 @@ document.addEventListener('DOMContentLoaded', () => {
                      hasBinaries = true;
                  }
             } else if (selectedFirmwareMethod === 'manual') {
-                // Use manual inputs 
+                // Use manual inputs
                  if (appFileInput?.files?.length > 0) {
                      // ... (manual file summary) ...
                  }
@@ -1995,28 +1981,32 @@ document.addEventListener('DOMContentLoaded', () => {
 
             if (!hasBinaries) {
                 flashSummaryElem.innerHTML = '<div class="summary-item text-warning"><i class="bi bi-exclamation-triangle me-2"></i> Select method and provide firmware</div>';
-                if (flashButton) flashButton.disabled = true; 
+                if (flashButton) flashButton.disabled = true;
             } else {
-                 if (flashButton) flashButton.disabled = !connected; 
+                 if (flashButton) flashButton.disabled = !connected;
             }
             addSummaryItem('bi-gear', `Settings: ${flashModeSelect.value.toUpperCase()}, ${flashFreqSelect.value}, ${flashSizeSelect.value}`);
             if (eraseAllCheckbox.checked) {
-                addSummaryItem('bi-eraser-fill text-warning', '<strong>Erase all flash before programming</strong>');
+                if (preserveRemoteSettingsCheckbox.checked) {
+                    addSummaryItem('bi-shield-check text-success', '<strong>Flash factory app only (preserving NVS & SPIFFS)</strong>');
+                } else {
+                    addSummaryItem('bi-eraser-fill text-warning', '<strong>Erase all flash before programming</strong>');
+                }
             }
-             updateButtonStates(); 
+             updateButtonStates();
         }
 
 
         // --- Modify updateButtonStates ---
          function updateButtonStates() {
              // ... (connection button logic) ...
-             
+
              // Action buttons depend on method and files/connection
              const canFlash = connected && hasFirmwareFilesSelected();
-             if (flashButton) flashButton.disabled = !canFlash; 
+             if (flashButton) flashButton.disabled = !canFlash;
              if (eraseButton) eraseButton.disabled = !connected;
-             if (resetButton) resetButton.disabled = !connected;
-             
+             if (eraseButton) eraseButton.disabled = !connected;
+
              // ... (connection settings logic) ...
 
              // Enable "Continue" (Next to Step 4) only if a method is selected AND files are ready
@@ -2029,8 +2019,8 @@ document.addEventListener('DOMContentLoaded', () => {
          startOverButton.addEventListener('click', () => {
              selectFirmwareMethod(null); // Reset the primary choice
              // Existing clear functions are good
-             clearExtractedData(); 
-             clearManualInputs(); 
+             clearExtractedData();
+             clearManualInputs();
              if (connected) {
                  disconnect().then(() => goToStep(1));
              } else {
@@ -2041,7 +2031,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // --- Modify updateBinaryTypeIndicators ---
         function updateBinaryTypeIndicators() {
             document.querySelectorAll('.file-badge').forEach(badge => badge.remove());
-            
+
             let hasApp = false, hasBootloader = false, hasPartition = false;
 
             // Only show badges based on the *current* state, respecting selected method
@@ -2073,10 +2063,10 @@ document.addEventListener('DOMContentLoaded', () => {
                  partitionButton?.insertAdjacentHTML('beforeend', '<span class="file-badge"></span>');
             }
         }
-        
+
          // --- Initialize Step 3 View ---
          // Call selectFirmwareMethod initially with null to ensure correct hidden state
-         selectFirmwareMethod(null); 
+         selectFirmwareMethod(null);
 
     }
 
@@ -2085,14 +2075,14 @@ document.addEventListener('DOMContentLoaded', () => {
         const statusIcon = document.querySelector('.status-icon');
         const statusMessage = document.getElementById('statusMessage');
         const statusDetails = document.getElementById('statusDetails');
-        
+
         if (statusMessage) statusMessage.textContent = message || 'Ready';
         if (statusDetails) statusDetails.textContent = details || '';
-        
+
         if (statusIcon) {
             // Reset all classes first
             statusIcon.className = 'bi status-icon';
-            
+
             // Add appropriate icon class based on status
             switch (status) {
                 case 'ready':
@@ -2150,7 +2140,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const label = document.querySelector(`label[for="${id}"] span`);
             const info = document.getElementById(id + 'Info');
             const dropZone = document.querySelector(`label[for="${id}"]`);
-            
+
             console.log(`${id}:`, {
                 hasFiles: input?.files?.length > 0,
                 fileName: input?.files?.[0]?.name,
@@ -2168,9 +2158,9 @@ document.addEventListener('DOMContentLoaded', () => {
         const fileInputs = ['appFile', 'bootloaderFile', 'partitionFile'];
         fileInputs.forEach(id => {
             const input = document.getElementById(id);
-            console.log(id, "has files:", input?.files?.length > 0, 
+            console.log(id, "has files:", input?.files?.length > 0,
                         input?.files?.[0]?.name || "none");
         });
     };
 
-}); 
+});
