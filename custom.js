@@ -25,14 +25,9 @@ document.addEventListener('DOMContentLoaded', () => {
         document.body.classList.add('multiple-eyes-angered');
     }
 
-    const deviceCards = document.querySelectorAll('.device-card');
     const nextToStep2Button = document.getElementById('nextToStep2');
 
-    deviceCards.forEach(card => {
-        card.addEventListener('click', () => {
-            nextToStep2Button.disabled = false;
-        });
-    });
+    // Remove device card event listeners since device selection is removed
 
     // Enhanced Eyelid Simulation with Realistic Glow Effects
     function initEyelidSimulation() {

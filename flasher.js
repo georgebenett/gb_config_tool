@@ -56,20 +56,16 @@ document.addEventListener('DOMContentLoaded', () => {
         const backToStep1Button = getElementById('backToStep1');
         const nextToStep3Button = getElementById('nextToStep3');
         const backToStep2Button = getElementById('backToStep2');
-        const nextToStep4Button = getElementById('nextToStep4');
-        const backToStep3Button = getElementById('backToStep3');
         const startOverButton = getElementById('startOver');
         const connectButton = getElementById('connectButton');
         const disconnectButton = getElementById('disconnectButton');
         const flashButton = getElementById('flashButton');
         const eraseButton = getElementById('eraseButton');
         const terminalElem = getElementById('terminal');
-        const terminalContainer = getElementById('terminal-container');
         const chipInfoElem = getElementById('chipInfo');
         const flashProgressElem = getElementById('flashProgress');
         const flashSummaryElem = getElementById('flashSummary');
         const flashETAElem = getElementById('flashETA');
-        const selectedDeviceConnectElem = getElementById('selectedDeviceConnect');
         const globalStatusIndicator = getElementById('globalStatusIndicator');
         const binaryTypeButtons = document.querySelectorAll('.binary-type-toggle .btn');
         const appFirmwareSection = getElementById('appFirmware');
@@ -100,8 +96,6 @@ document.addEventListener('DOMContentLoaded', () => {
         let transport = null;
         let connected = false;
         let chipType = '';
-        let selectedDevice = null;
-        let selectedSide = '';
         let currentStep = 1;
         let extractedGhostEspFiles = null;
         let selectedFirmwareMethod = null; // To track 'download' or 'manual'
@@ -133,114 +127,21 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         };
 
-        // --- Device Options Const ---
-        const deviceOptions = {
-            'ESP32': {
-                defaultFlashMode: 'dio',
-                defaultFlashFreq: '40m',
-                defaultFlashSize: '4MB',
-                appAddress: '0x10000',
-                bootloaderAddress: '0x1000',
-                partitionAddress: '0x8000'
-            },
-            'ESP32-S2': {
-                defaultFlashMode: 'dio',
-                defaultFlashFreq: '80m',
-                defaultFlashSize: '4MB',
-                appAddress: '0x10000',
-                bootloaderAddress: '0x1000',
-                partitionAddress: '0x8000'
-            },
-            'ESP32-S3': {
-                defaultFlashMode: 'dio',
-                defaultFlashFreq: '80m',
-                defaultFlashSize: '8MB',
-                appAddress: '0x10000',
-                bootloaderAddress: '0x0',
-                partitionAddress: '0x8000'
-            },
-            'ESP32-C3': {
-                defaultFlashMode: 'dio',
-                defaultFlashFreq: '40m',
-                defaultFlashSize: '4MB',
-                appAddress: '0x10000',
-                bootloaderAddress: '0x0',
-                partitionAddress: '0x8000'
-            },
-            'ESP32-C6': {
-                defaultFlashMode: 'dio',
-                defaultFlashFreq: '80m',
-                defaultFlashSize: '4MB',
-                appAddress: '0x10000',
-                bootloaderAddress: '0x0',
-                partitionAddress: '0x8000'
-            },
-            'ESP32-C5': {
-                defaultFlashMode: 'dio',
-                defaultFlashFreq: '80m',
-                defaultFlashSize: '4MB',
-                appAddress: '0x10000',
-                bootloaderAddress: '0x2000',
-                partitionAddress: '0x8000'
-            },
-            'ESP32-H2': {
-                defaultFlashMode: 'dio',
-                defaultFlashFreq: '40m',
-                defaultFlashSize: '4MB',
-                appAddress: '0x10000',
-                bootloaderAddress: '0x0',
-                partitionAddress: '0x8000'
-            },
-            'ESP8266': {
-                defaultFlashMode: 'dio',
-                defaultFlashFreq: '40m',
-                defaultFlashSize: '4MB',
-                appAddress: '0x10000',
-                bootloaderAddress: '0x0',
-                partitionAddress: '0x8000'
-            },
-            'ESP32-C2': {
-                defaultFlashMode: 'dio',
-                defaultFlashFreq: '40m',
-                defaultFlashSize: '4MB',
-                appAddress: '0x10000',
-                bootloaderAddress: '0x0',
-                partitionAddress: '0x8000'
-            },
-            'ESP32-P4': {
-                defaultFlashMode: 'dio',
-                defaultFlashFreq: '80m',
-                defaultFlashSize: '4MB',
-                appAddress: '0x10000',
-                bootloaderAddress: '0x2000',
-                partitionAddress: '0x8000'
-            }
-        };
-
         // --- Event Listeners ---
         nextToStep2Button.addEventListener('click', () => {
-            if (selectedDevice) {
+            if (connected) {
                 goToStep(2);
-                selectedDeviceConnectElem.textContent = selectedSide;
             } else {
-                espLoaderTerminal.writeLine("Please select a side first");
+                espLoaderTerminal.writeLine("Please connect to a device first");
             }
         });
 
         backToStep1Button.addEventListener('click', () => goToStep(1));
         nextToStep3Button.addEventListener('click', () => {
-            if (connected) {
-                goToStep(3);
-            } else {
-                espLoaderTerminal.writeLine("Please connect to a device first");
-            }
+            updateFlashSummary();
+            goToStep(3);
         });
         backToStep2Button.addEventListener('click', () => goToStep(2));
-        nextToStep4Button.addEventListener('click', () => {
-            updateFlashSummary();
-            goToStep(4);
-        });
-        backToStep3Button.addEventListener('click', () => goToStep(3));
         startOverButton.addEventListener('click', () => {
             clearExtractedData(); // Clear loaded ZIP data
             clearManualInputs(); // Also clear manual inputs
@@ -270,19 +171,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
             });
         }
-
-        const deviceCards = document.querySelectorAll('.device-card');
-        deviceCards.forEach(card => {
-            card.addEventListener('click', () => {
-                deviceCards.forEach(c => c.classList.remove('selected'));
-                card.classList.add('selected');
-                selectedDevice = card.dataset.device;
-                selectedSide = card.querySelector('.device-name').textContent;
-                espLoaderTerminal.writeLine(`Selected: ${selectedSide} (${selectedDevice})`);
-                updateDefaultAddresses();
-                if (nextToStep2Button) nextToStep2Button.disabled = false;
-            });
-        });
 
         connectButton.addEventListener('click', connect);
         disconnectButton.addEventListener('click', disconnect);
@@ -394,15 +282,13 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         function updateDefaultAddresses() {
-            if (selectedDevice && deviceOptions[selectedDevice]) {
-                const options = deviceOptions[selectedDevice];
-                flashModeSelect.value = options.defaultFlashMode;
-                flashFreqSelect.value = options.defaultFlashFreq;
-                flashSizeSelect.value = options.defaultFlashSize;
-                if (appAddressInput) appAddressInput.value = options.appAddress;
-                if (bootloaderAddressInput) bootloaderAddressInput.value = options.bootloaderAddress;
-                if (partitionAddressInput) partitionAddressInput.value = options.partitionAddress;
-            }
+            // Set default values for ESP32 variants
+            flashModeSelect.value = 'dio';
+            flashFreqSelect.value = '40m';
+            flashSizeSelect.value = '4MB';
+            if (appAddressInput) appAddressInput.value = '0x10000';
+            if (bootloaderAddressInput) bootloaderAddressInput.value = '0x1000';
+            if (partitionAddressInput) partitionAddressInput.value = '0x8000';
         }
 
         function updateFileInfo(fileInput, infoElement) {
@@ -496,11 +382,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         async function connect() {
-            if (!selectedDevice) {
-                espLoaderTerminal.writeLine("Please select a device type first");
-                return;
-            }
-
             // Disable connect button during connection attempt
              if (connectButton) connectButton.disabled = true;
 
@@ -522,8 +403,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     enableTracing: true
                 });
                 chipType = await espLoader.main();
-                espLoaderTerminal.writeLine(`Connected to ${selectedSide} (${chipType})`);
-                let chipInfoText = `<span class="status-indicator status-connected"></span> Connected to ${selectedSide} (${chipType})`;
+                espLoaderTerminal.writeLine(`Connected to ${chipType}`);
+                let chipInfoText = `<span class="status-indicator status-connected"></span> Connected to ${chipType}`;
                 chipInfoElem.innerHTML = chipInfoText;
                 connected = true;
                 updateButtonStates();
@@ -536,8 +417,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 } catch (error) {
                     espLoaderTerminal.writeLine("Couldn't determine flash size");
                 }
-                if (nextToStep3Button) nextToStep3Button.disabled = false;
-                updateStatusIndicator('success', 'Connected', `${selectedSide} (${chipType})`);
+                if (nextToStep2Button) nextToStep2Button.disabled = false;
+                updateStatusIndicator('success', 'Connected', `${chipType}`);
                 espLoaderTerminal.writeLine("Device info:");
                 try {
                     if (device.getInfo) {
@@ -600,7 +481,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     connected = false;
                     updateButtonStates();
                     chipInfoElem.innerHTML = `<span class="status-indicator status-disconnected"></span> Disconnected`;
-                    nextToStep3Button.disabled = true;
+                    if (nextToStep2Button) nextToStep2Button.disabled = true;
                     return true;
                 } catch (error) {
                     console.error(error);
@@ -612,7 +493,7 @@ document.addEventListener('DOMContentLoaded', () => {
             connected = false;
             updateButtonStates();
             chipInfoElem.innerHTML = `<span class="status-indicator status-disconnected"></span> Disconnected`;
-            if (nextToStep3Button) nextToStep3Button.disabled = true;
+            if (nextToStep2Button) nextToStep2Button.disabled = true;
             return true;
         }
 
@@ -629,10 +510,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
             // Clear ETA at the start
             if (flashETAElem) flashETAElem.textContent = '';
-
-            // Save device information for reconnection
-            const savedDevice = selectedDevice;
-            const savedSide = selectedSide;
 
             // Disable buttons during flash
             flashButton.disabled = true;
@@ -1139,9 +1016,9 @@ document.addEventListener('DOMContentLoaded', () => {
             // if (resetMethodSelect) resetMethodSelect.disabled = connected;
 
             // Disable next step buttons based on state
-            if (nextToStep3Button) nextToStep3Button.disabled = !connected;
+            if (nextToStep2Button) nextToStep2Button.disabled = !connected;
             // Call hasFirmwareFilesSelected safely here
-            if (nextToStep4Button) nextToStep4Button.disabled = !hasFirmwareFilesSelected();
+            if (nextToStep3Button) nextToStep3Button.disabled = !hasFirmwareFilesSelected();
         }
 
         // Check if WebSerial is supported
@@ -1198,7 +1075,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const webSerialModal = new bootstrap.Modal(getElementById('webSerialModal'));
             webSerialModal.show();
         } else {
-            espLoaderTerminal.writeLine("GB Remote Config Tool ready. Please select your device type.");
+            espLoaderTerminal.writeLine("GB Remote Config Tool ready. Connect your ESP32 device to get started.");
         }
 
         // Initialize the UI
@@ -2096,8 +1973,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
              // ... (connection settings logic) ...
 
-             // Enable "Continue" (Next to Step 4) only if a method is selected AND files are ready
-             if (nextToStep4Button) nextToStep4Button.disabled = !hasFirmwareFilesSelected();
+             // Enable "Continue" (Next to Step 3) only if a method is selected AND files are ready
+             if (nextToStep3Button) nextToStep3Button.disabled = !hasFirmwareFilesSelected();
 
              // ... (rest of button logic) ...
          }
