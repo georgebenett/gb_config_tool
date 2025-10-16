@@ -91,7 +91,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const partitionAddressInput = getElementById('partitionAddress');
         const ghostEspDownloadSection = getElementById('ghostEspDownloadSection');
         const manualUploadSection = getElementById('manualUploadSection');
-        const ghostEspVariantSelect = getElementById('ghostEspVariantSelect');
+        const downloadGbRemoteBtn = getElementById('downloadGbRemoteBtn');
         const choiceDownloadCard = getElementById('choiceDownload');
         const choiceManualCard = getElementById('choiceManual');
         const downloadOptionsContainer = getElementById('downloadOptionsContainer');
@@ -1411,7 +1411,8 @@ document.addEventListener('DOMContentLoaded', () => {
             console.log(`[Debug] Using CF Worker proxy URL: ${proxyUrl}`); // Log proxy URL
             espLoaderTerminal.writeLine(`Fetching GhostESP firmware via proxy from ${zipUrl}...`);
             
-            if (ghostEspVariantSelect) ghostEspVariantSelect.disabled = true; 
+            // Disable download button during processing
+            if (downloadGbRemoteBtn) downloadGbRemoteBtn.disabled = true; 
 
             extractedGhostEspFiles = null; 
 
@@ -1539,7 +1540,7 @@ document.addEventListener('DOMContentLoaded', () => {
                  updateBinaryTypeIndicators(); // Clear badges on error
             } finally {
                 console.log('[Debug] loadGhostEspZip: Finally block reached. Re-enabling select.'); 
-                 if (ghostEspVariantSelect) ghostEspVariantSelect.disabled = false; 
+                 if (downloadGbRemoteBtn) downloadGbRemoteBtn.disabled = false; 
                 updateButtonStates(); 
             }
         }
@@ -1552,7 +1553,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     console.log(`[Debug] Select changed for ID: ${selectElement.id}, Value: ${selectedValue}`); // <<< ADD LOG
 
                     // --- GhostESP Special Handling ---
-                    if (selectElement.id === 'ghostEspVariantSelect') {
+                    if (selectElement.id === 'downloadGbRemoteBtn') {
                         console.log('[Debug] GhostESP variant selected, attempting load...'); // <<< ADD LOG
                         linkElement.href = '#'; // Keep link disabled for GhostESP
                         linkElement.classList.add('disabled');
@@ -1581,7 +1582,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         // --- Remove the early call for GhostESP ---
-        // setupDownloadLinkListener(ghostEspVariantSelect, ghostEspDownloadLink); 
+        // setupDownloadLinkListener(ghostEspVariantSelect, ghostEspDownloadLink);  
         
 
         // --- THIS BLOCK IS THE CULPRIT - Commenting it out ---
@@ -1615,16 +1616,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 } else if (selectedSource === 'ghostesp') {
                      console.log('[Debug] Source is ghostesp, showing section and populating options...'); // <<< ADD LOG
                     ghostEspDownloadSection?.classList.remove('d-none');
-                    populateRepoOptions('Spooks4576', 'Ghost_ESP', 'ghostEspVariantSelect', '.zip', '-- Select a GhostESP ZIP... --', selectedDevice)
-                        .then(() => {
-                            // --- Move GhostESP Listener Setup Here ---
-                            console.log('[Debug] Populated GhostESP options, now setting up listener.'); // <<< ADD LOG
-                            setupDownloadLinkListener(ghostEspVariantSelect, ghostEspDownloadLink); 
-                            // Note: GhostESP download link is now unused / kept disabled by setupDownloadLinkListener
-                        })
-                        .catch(err => {
-                            console.error('[Debug] Error during populateRepoOptions for GhostESP:', err); // <<< ADD LOG
-                        });
                 
                 updateFlashSummary(); // Update summary after source change
                 updateButtonStates(); // Update buttons after source change
@@ -1715,6 +1706,42 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         }
 
+        // Event listener for the download button
+        if (downloadGbRemoteBtn) {
+            downloadGbRemoteBtn.addEventListener('click', async () => {
+                try {
+                    // Get the latest release URL for gb_remote_lite.zip
+                    const apiUrl = 'https://api.github.com/repos/georgebenett/gb_remote/releases/latest';
+                    espLoaderTerminal.writeLine('Fetching latest release from georgebenett/gb_remote...');
+                    
+                    const response = await fetch(apiUrl);
+                    if (!response.ok) {
+                        throw new Error(`GitHub API Error: ${response.status} ${response.statusText}`);
+                    }
+                    
+                    const release = await response.json();
+                    const zipAsset = release.assets.find(asset => asset.name === 'gb_remote_lite.zip');
+                    
+                    if (!zipAsset) {
+                        throw new Error('gb_remote_lite.zip not found in latest release');
+                    }
+                    
+                    espLoaderTerminal.writeLine(`Found gb_remote_lite.zip in release ${release.tag_name}`);
+                    
+                    // Download and extract the ZIP
+                    await loadGhostEspZip(zipAsset.browser_download_url);
+                    
+                } catch (error) {
+                    console.error('Error downloading gb_remote_lite.zip:', error);
+                    espLoaderTerminal.writeLine(`❌ Error downloading firmware: ${error.message}`);
+                    if (ghostEspStatusElem) {
+                        ghostEspStatusElem.textContent = `Error: ${error.message}`;
+                        ghostEspStatusElem.className = 'form-text text-danger mt-2 error';
+                    }
+                }
+            });
+        }
+
         function selectFirmwareMethod(method) {
             selectedFirmwareMethod = method;
 
@@ -1729,20 +1756,8 @@ document.addEventListener('DOMContentLoaded', () => {
             // Reset state if switching
             if (method === 'download') {
                 clearManualInputs(); 
-                // Automatically populate GhostESP options
+                // Show download section
                 ghostEspDownloadSection?.classList.remove('d-none');
-                populateRepoOptions('jaylikesbunda', 'Ghost_ESP', 'ghostEspVariantSelect', '.zip', '-- Select GhostESP Build --', selectedDevice)
-                    .then(() => {
-                        console.log('[Debug] Populated GhostESP options, setting up listener.');
-                        setupDownloadLinkListener(ghostEspVariantSelect, null);
-                    })
-                    .catch(err => {
-                        console.error('[Debug] Error populating GhostESP options:', err);
-                        if (ghostEspStatusElem) {
-                            ghostEspStatusElem.textContent = 'Error loading variants from GitHub.';
-                            ghostEspStatusElem.className = 'form-text text-danger mt-2 error';
-                        }
-                    });
             } else { // method === 'manual'
                 clearExtractedData();
                 ghostEspDownloadSection?.classList.add('d-none');
@@ -1778,7 +1793,8 @@ document.addEventListener('DOMContentLoaded', () => {
             console.log(`[Debug] Using CF Worker proxy URL: ${proxyUrl}`); 
             espLoaderTerminal.writeLine(`Fetching GhostESP firmware via proxy from ${zipUrl}...`);
             
-            if (ghostEspVariantSelect) ghostEspVariantSelect.disabled = true; 
+            // Disable download button during processing
+            if (downloadGbRemoteBtn) downloadGbRemoteBtn.disabled = true; 
             extractedGhostEspFiles = null; 
 
             try {
@@ -1806,8 +1822,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 const zip = await JSZip.loadAsync(zipBlob);
                 console.log('[Debug] loadGhostEspZip: JSZip loaded successfully.'); 
                 
-                const filesToExtract = { // Corrected filenames
-                    app: { name: 'Ghost_ESP_IDF.bin', data: null, elem: appFileInfoElem, addressInput: appAddressInput, type: 'Application' }, 
+                const filesToExtract = { // Updated filenames for gb_remote
+                    app: { name: 'gb_controller_lite.bin', data: null, elem: appFileInfoElem, addressInput: appAddressInput, type: 'Application' }, 
                     bootloader: { name: 'bootloader.bin', data: null, elem: bootloaderFileInfoElem, addressInput: bootloaderAddressInput, type: 'Bootloader' }, 
                     partition: { name: 'partition-table.bin', data: null, elem: partitionFileInfoElem, addressInput: partitionAddressInput, type: 'Partition' } 
                 };
@@ -1888,48 +1904,11 @@ document.addEventListener('DOMContentLoaded', () => {
                  updateBinaryTypeIndicators(); // Clear badges on error
             } finally {
                 console.log('[Debug] loadGhostEspZip: Finally block reached. Re-enabling select.'); 
-                 if (ghostEspVariantSelect) ghostEspVariantSelect.disabled = false; 
+                 if (downloadGbRemoteBtn) downloadGbRemoteBtn.disabled = false; 
                 updateButtonStates(); 
             }
         }
 
-        // --- Modify setupDownloadLinkListener ---
-        // Listener setup complete
-        // Listener for GhostESP is now attached *after* populateRepoOptions finishes in the selectFirmwareMethod function
-        function setupDownloadLinkListener(selectElement, linkElement) {
-             // Refined check: selectElement is always required.
-             // linkElement is only required if it's NOT the GhostESP select.
-             if (!selectElement) {
-                 console.error(`[Debug] setupDownloadLinkListener: Missing selectElement!`);
-                 return;
-             }
-             if (selectElement.id !== 'ghostEspVariantSelect' && !linkElement) { 
-                 console.error(`[Debug] setupDownloadLinkListener: Missing linkElement for Select: ${selectElement.id}`);
-                 return;
-             }
-             // If it IS ghostEspVariantSelect, linkElement can be null, so we proceed.
-
-            // Remove previous listener if any, to avoid duplicates when re-attaching
-
-            selectElement.addEventListener('change', () => {
-                const selectedValue = selectElement.value;
-                console.log(`[Debug] Select changed for ID: ${selectElement.id}, Value: ${selectedValue}`); 
-
-                // --- GhostESP Special Handling ---
-                if (selectElement.id === 'ghostEspVariantSelect') {
-                    console.log('[Debug] GhostESP variant selected, attempting load...'); 
-                    // Remove lines trying to modify the null linkElement for GhostESP
-                    // linkElement.href = '#'; // REMOVED
-                    // linkElement.classList.add('disabled'); // REMOVED
-                    // linkElement.classList.replace('btn-primary', 'btn-secondary'); // REMOVED
-                    loadGhostEspZip(selectedValue); 
-                }
-            });
-             console.log(`[Debug] Attached change listener to ${selectElement.id}`);
-        }
-
-        // --- Remove the early calls for listeners ---
-        // setupDownloadLinkListener(ghostEspVariantSelect, ghostEspDownloadLink); 
 
         // --- REMOVE OLD firmwareSourceSelect listener ---
         /* 
