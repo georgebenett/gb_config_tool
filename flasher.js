@@ -78,8 +78,6 @@ document.addEventListener('DOMContentLoaded', () => {
         const flashModeSelect = getElementById('flashMode');
         const flashFreqSelect = getElementById('flashFreq');
         const flashSizeSelect = getElementById('flashSize');
-        const eraseAllCheckbox = getElementById('eraseAll');
-        const preserveRemoteSettingsCheckbox = getElementById('preserveRemoteSettings');
         const appFileInput = getElementById('appFile');
         const bootloaderFileInput = getElementById('bootloaderFile');
         const partitionFileInput = getElementById('partitionFile');
@@ -476,13 +474,7 @@ document.addEventListener('DOMContentLoaded', () => {
                  if (flashButton) flashButton.disabled = !connected;
             }
             addSummaryItem('bi-gear', `Settings: ${flashModeSelect.value.toUpperCase()}, ${flashFreqSelect.value}, ${flashSizeSelect.value}`);
-            if (eraseAllCheckbox.checked) {
-                if (preserveRemoteSettingsCheckbox.checked) {
-                    addSummaryItem('bi-shield-check text-success', '<strong>Flash factory app only (preserving NVS & SPIFFS)</strong>');
-                } else {
-                    addSummaryItem('bi-eraser-fill text-warning', '<strong>Erase all flash before programming</strong>');
-                }
-            }
+            addSummaryItem('bi-shield-check text-success', '<strong>Flash factory app only (preserving NVS & SPIFFS)</strong>');
              updateButtonStates();
         }
 
@@ -605,7 +597,6 @@ document.addEventListener('DOMContentLoaded', () => {
             if (transport && espLoader) {
                 try {
                     await transport.disconnect();
-                    espLoaderTerminal.writeLine("Disconnected from device");
                     connected = false;
                     updateButtonStates();
                     chipInfoElem.innerHTML = `<span class="status-indicator status-disconnected"></span> Disconnected`;
@@ -625,7 +616,7 @@ document.addEventListener('DOMContentLoaded', () => {
             return true;
         }
 
-        async function flash() {
+        async function flash(preserveSettings = true) {
             if (!connected || !espLoader) {
                 espLoaderTerminal.writeLine("Not connected to a device");
                 return;
@@ -657,25 +648,20 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 // --- Start: Erase Logic Update ---
                 let eraseSuccessful = true; // Assume success if not erasing
-                if (eraseAllCheckbox.checked) {
-                    // Check if we should preserve remote settings
-                    if (preserveRemoteSettingsCheckbox && preserveRemoteSettingsCheckbox.checked) {
-                        espLoaderTerminal.writeLine("Preserve Remote Settings enabled - skipping erase, will flash factory app only");
-                        updateStatusIndicator('flashing', 'Skipping erase...', 'Preserving NVS & SPIFFS');
-                    } else {
-                        espLoaderTerminal.writeLine("Erase requested before flashing. This may take a moment...");
-                        updateStatusIndicator('flashing', 'Erasing flash...', 'This may take a moment...');
-                        try {
-                            await eraseFlashInternal(); // Await the erase operation
-                        } catch (eraseError) {
-                            espLoaderTerminal.writeLine(`❌ Erase failed: ${eraseError.message}. Aborting flash operation.`);
-                            chipInfoElem.innerHTML = `<span class="status-indicator status-error"></span> Erase Failed`;
-                            updateStatusIndicator('error', 'Erase Failed', eraseError.message);
-                            eraseSuccessful = false; // Mark erase as failed
-                        }
-                    }
+                if (preserveSettings) {
+                    espLoaderTerminal.writeLine("Preserve Remote Settings enabled - skipping erase, will flash factory app only");
+                    updateStatusIndicator('flashing', 'Skipping erase...', 'Preserving NVS & SPIFFS');
                 } else {
-                    espLoaderTerminal.writeLine("Skipping erase step as checkbox is not checked.");
+                    espLoaderTerminal.writeLine("Full erase and flash mode - will erase all flash and flash complete firmware");
+                    updateStatusIndicator('flashing', 'Erasing flash...', 'This may take a moment...');
+                    try {
+                        await eraseFlashInternal(); // Await the erase operation
+                    } catch (eraseError) {
+                        espLoaderTerminal.writeLine(`❌ Erase failed: ${eraseError.message}. Aborting flash operation.`);
+                        chipInfoElem.innerHTML = `<span class="status-indicator status-error"></span> Erase Failed`;
+                        updateStatusIndicator('error', 'Erase Failed', eraseError.message);
+                        eraseSuccessful = false; // Mark erase as failed
+                    }
                 }
 
                 if (!eraseSuccessful) {
@@ -697,12 +683,10 @@ document.addEventListener('DOMContentLoaded', () => {
                     for (const key in extractedGhostEspFiles) {
                         const fileInfo = extractedGhostEspFiles[key];
                         if (fileInfo.data) {
-                            // Skip bootloader and partition if preserve is enabled
-                            if (preserveRemoteSettingsCheckbox && preserveRemoteSettingsCheckbox.checked) {
-                                if (key === 'bootloader' || key === 'partition') {
-                                    espLoaderTerminal.writeLine(`Skipping ${fileInfo.name} (preserving existing bootloader/partition)`);
-                                    continue;
-                                }
+                            // Skip bootloader and partition if preserving settings
+                            if (preserveSettings && (key === 'bootloader' || key === 'partition')) {
+                                espLoaderTerminal.writeLine(`Skipping ${fileInfo.name} (preserving existing bootloader/partition)`);
+                                continue;
                             }
 
                             const flashAddress = parseInt(fileInfo.addressInput.value, 16);
@@ -732,12 +716,10 @@ document.addEventListener('DOMContentLoaded', () => {
                     [partitionFileInput, partitionAddressInput, 'Partition']
                 ]) {
                         if (inputElem?.files?.length > 0) {
-                        // Skip bootloader and partition if preserve is enabled
-                        if (preserveRemoteSettingsCheckbox && preserveRemoteSettingsCheckbox.checked) {
-                            if (fileType === 'Bootloader' || fileType === 'Partition') {
-                                espLoaderTerminal.writeLine(`Skipping ${fileType} (preserving existing bootloader/partition)`);
-                                continue;
-                            }
+                        // Skip bootloader and partition if preserving settings
+                        if (preserveSettings && (fileType === 'Bootloader' || fileType === 'Partition')) {
+                            espLoaderTerminal.writeLine(`Skipping ${fileType} (preserving existing bootloader/partition)`);
+                            continue;
                         }
 
                         const file = inputElem.files[0];
@@ -885,13 +867,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 updateStatusIndicator('success', 'Flash complete!', 'Attempting device reset...');
 
                 try {
-                    espLoaderTerminal.writeLine("Attempting soft reset (into app)...");
                     await espLoader.softReset(true);
-                    espLoaderTerminal.writeLine("Soft reset command sent.");
                     await new Promise(resolve => setTimeout(resolve, 500));
                 } catch (resetError) {
                     console.error("Soft reset failed:", resetError);
-                    espLoaderTerminal.writeLine(`Note: Soft reset command failed: ${resetError.message}. Manual reset may be required.`);
                 }
 
                 try {
@@ -906,22 +885,12 @@ document.addEventListener('DOMContentLoaded', () => {
                                  <i class="bi bi-lightning"></i> Flash Firmware
                              </button>
                              <button id="eraseButton" class="btn btn-warning">
-                                 <i class="bi bi-trash"></i> Erase Flash
+                                 <i class="bi bi-trash"></i> Erase Device & Flash
                              </button>
                          `;
                          // Reattach event listeners
                         document.getElementById('flashButton').addEventListener('click', flash);
                         document.getElementById('eraseButton').addEventListener('click', eraseFlash);
-                        // Add back the disconnect button which is missing now
-                        // Need to decide if disconnect should be present after flashing+reset attempt
-                        // Let's assume yes, but it might not work if the device truly reset
-                        actionButtons.insertAdjacentHTML('beforeend', `
-                             <button id="disconnectButton" class="btn btn-secondary ms-2">
-                                 <i class="bi bi-x-circle"></i> Disconnect
-                             </button>
-                         `);
-                        const disconnectBtn = document.getElementById('disconnectButton');
-                        if (disconnectBtn) disconnectBtn.addEventListener('click', disconnect);
                     }
                     connected = false; // Assume disconnect happened or reset lost connection
                     updateButtonStates();
@@ -1004,10 +973,129 @@ document.addEventListener('DOMContentLoaded', () => {
             // --- REMOVED finally block for hiding indicator here, handled in success/error ---
         }
 
+        // Function to show erase confirmation dialog
+        function showEraseConfirmation() {
+            return new Promise((resolve) => {
+                // Create modal HTML
+                const modalHtml = `
+                    <div class="modal fade" id="eraseConfirmModal" tabindex="-1" aria-labelledby="eraseConfirmModalLabel" aria-hidden="true">
+                        <div class="modal-dialog modal-dialog-centered">
+                            <div class="modal-content">
+                                <div class="modal-header">
+                                    <h5 class="modal-title" id="eraseConfirmModalLabel">
+                                        <i class="bi bi-exclamation-triangle text-warning me-2"></i>
+                                        Confirm Full Erase & Flash
+                                    </h5>
+                                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                </div>
+                                <div class="modal-body">
+                                    <div class="alert alert-danger text-white" role="alert">
+                                        <h6 class="alert-heading text-white">
+                                            <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                                            WARNING: This will erase ALL data and flash new firmware!
+                                        </h6>
+                                        <p class="mb-2 text-white">This procedure will completely erase the flash memory, remove all data, and flash new firmware:</p>
+                                        <ul class="mb-2 text-white">
+                                            <li><strong>Odometer readings</strong> - All mileage data will be lost</li>
+                                            <li><strong>VESC settings</strong> - configuration will be reset</li>
+                                            <li><strong>Throttle calibrations</strong> - You'll need to recalibrate the throttle</li>
+                                            <li><strong>All your configuration data</strong> - Custom configurations and files</li>
+                                        </ul>
+                                        <hr class="border-light">
+                                        <p class="mb-0 text-white">
+                                            <strong>You will need to:</strong><br>
+                                            • Reconfigure the remote settings<br>
+                                            • Recalibrate the throttle system<br>
+                                        </p>
+                                    </div>
+                                    <p class="text-muted">
+                                        <i class="bi bi-info-circle me-1"></i>
+                                        This action cannot be undone. Are you absolutely sure you want to proceed?
+                                    </p>
+                                </div>
+                                <div class="modal-footer">
+                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                                        <i class="bi bi-x-circle me-1"></i>Cancel
+                                    </button>
+                                    <button type="button" class="btn btn-danger" id="confirmEraseBtn">
+                                        <i class="bi bi-trash me-1"></i>Erase & Flash
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+
+                // Add modal to body
+                document.body.insertAdjacentHTML('beforeend', modalHtml);
+                const modal = document.getElementById('eraseConfirmModal');
+                const confirmBtn = document.getElementById('confirmEraseBtn');
+                const cancelBtn = modal.querySelector('.btn-secondary');
+                const bsModal = new bootstrap.Modal(modal);
+
+                // Set up event listeners
+                confirmBtn.addEventListener('click', () => {
+                    bsModal.hide();
+                    setTimeout(() => {
+                        modal.remove();
+                        // Remove any remaining backdrop
+                        const backdrop = document.querySelector('.modal-backdrop');
+                        if (backdrop) {
+                            backdrop.remove();
+                        }
+                        // Remove modal-open class from body
+                        document.body.classList.remove('modal-open');
+                        document.body.style.overflow = '';
+                    }, 150);
+                    resolve(true);
+                });
+
+                cancelBtn.addEventListener('click', () => {
+                    bsModal.hide();
+                    setTimeout(() => {
+                        modal.remove();
+                        // Remove any remaining backdrop
+                        const backdrop = document.querySelector('.modal-backdrop');
+                        if (backdrop) {
+                            backdrop.remove();
+                        }
+                        // Remove modal-open class from body
+                        document.body.classList.remove('modal-open');
+                        document.body.style.overflow = '';
+                    }, 150);
+                    resolve(false);
+                });
+
+                // Handle modal close events
+                modal.addEventListener('hidden.bs.modal', () => {
+                    modal.remove();
+                    // Remove any remaining backdrop
+                    const backdrop = document.querySelector('.modal-backdrop');
+                    if (backdrop) {
+                        backdrop.remove();
+                    }
+                    // Remove modal-open class from body
+                    document.body.classList.remove('modal-open');
+                    document.body.style.overflow = '';
+                    resolve(false);
+                });
+
+                // Show the modal
+                bsModal.show();
+            });
+        }
+
         // UPDATED eraseFlash function (for the button)
         async function eraseFlash() {
             if (!connected || !espLoader) {
                 espLoaderTerminal.writeLine("Not connected to a device");
+                return;
+            }
+
+            // Show confirmation dialog
+            const confirmed = await showEraseConfirmation();
+            if (!confirmed) {
+                espLoaderTerminal.writeLine("Erase operation cancelled by user");
                 return;
             }
 
@@ -1016,12 +1104,17 @@ document.addEventListener('DOMContentLoaded', () => {
             flashButton.disabled = true;
 
             try {
-                // The indicator is now managed within eraseFlashInternal
+                // First erase the flash
+                espLoaderTerminal.writeLine("Starting complete erase and flash operation...");
                 await eraseFlashInternal();
-                // Erase was successful
+                espLoaderTerminal.writeLine("✅ Erase completed successfully. Now flashing firmware...");
+
+                // After successful erase, proceed with flashing all files
+                await flash(false);
+
             } catch (error) {
-                // Error already logged and indicator handled by eraseFlashInternal
-                espLoaderTerminal.writeLine("Standalone erase operation failed.");
+                // Error already logged and indicator handled by eraseFlashInternal or flash
+                espLoaderTerminal.writeLine("❌ Erase and flash operation failed.");
             } finally {
                 // Re-enable buttons based on state
                 updateButtonStates();
@@ -1986,13 +2079,7 @@ document.addEventListener('DOMContentLoaded', () => {
                  if (flashButton) flashButton.disabled = !connected;
             }
             addSummaryItem('bi-gear', `Settings: ${flashModeSelect.value.toUpperCase()}, ${flashFreqSelect.value}, ${flashSizeSelect.value}`);
-            if (eraseAllCheckbox.checked) {
-                if (preserveRemoteSettingsCheckbox.checked) {
-                    addSummaryItem('bi-shield-check text-success', '<strong>Flash factory app only (preserving NVS & SPIFFS)</strong>');
-                } else {
-                    addSummaryItem('bi-eraser-fill text-warning', '<strong>Erase all flash before programming</strong>');
-                }
-            }
+            addSummaryItem('bi-shield-check text-success', '<strong>Flash factory app only (preserving NVS & SPIFFS)</strong>');
              updateButtonStates();
         }
 
