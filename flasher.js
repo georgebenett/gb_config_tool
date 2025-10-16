@@ -90,16 +90,12 @@ document.addEventListener('DOMContentLoaded', () => {
         const bootloaderAddressInput = getElementById('bootloaderAddress');
         const partitionAddressInput = getElementById('partitionAddress');
         const ghostEspDownloadSection = getElementById('ghostEspDownloadSection');
-        const marauderDownloadSection = getElementById('marauderDownloadSection');
         const manualUploadSection = getElementById('manualUploadSection');
         const ghostEspVariantSelect = getElementById('ghostEspVariantSelect');
-        const marauderVariantSelect = getElementById('marauderVariantSelect');
-        const marauderDownloadLink = getElementById('marauderDownloadLink');
         const choiceDownloadCard = getElementById('choiceDownload');
         const choiceManualCard = getElementById('choiceManual');
         const downloadOptionsContainer = getElementById('downloadOptionsContainer');
         const manualUploadContainer = getElementById('manualUploadContainer');
-        const downloadSourceSelect = getElementById('downloadSourceSelect');
         const ghostEspStatusElem = getElementById('ghostEspStatus');
 
         // --- Let Declarations (Moved Up) ---
@@ -1185,25 +1181,6 @@ document.addEventListener('DOMContentLoaded', () => {
             "esp32c6-generic.zip": "Generic ESP32-C6",
             "esp32v5_awok.zip": "Awok V5 (ESP32-S2)",
             "ghostboard.zip": "Rabbit Labs' GhostBoard (ESP32-C6)",
-            "MarauderV4_FlipperHub.zip": "Marauder V4 / FlipperHub (ESP32)",
-            "MarauderV6_AwokDual.zip": "Marauder V6 / Awok Dual (ESP32)",
-            "AwokMini.zip": "Awok Mini (ESP32-S2)",
-            "ESP32-S3-Cardputer.zip": "M5Stack Cardputer (ESP32-S3)",
-            "CYD2USB.zip": "CYD2USB (ESP32)",
-            "CYDMicroUSB.zip": "CYD MicroUSB (ESP32)",
-            "CYDDualUSB.zip": "CYD Dual USB (ESP32)",
-            "CYD2USB2.4Inch.zip": "CYD 2.4 Inch USB (ESP32)",
-            "CYD2USB2.4Inch_C.zip": "CYD 2.4 Inch USB-C (ESP32)",
-            "CYD2432S028R.zip": "CYD2432S028R (ESP32)",
-            "Waveshare_LCD.zip": "Waveshare 7\" LCD (ESP32-S3)",
-            "Crowtech_LCD.zip": "Crowtech 7\" LCD (ESP32-S3)",
-            "Sunton_LCD.zip": "Sunton 7\" LCD (ESP32-S3)",
-            "JC3248W535EN_LCD.zip": "JC3248W535EN LCD (ESP32-S3)",
-            "Flipper_JCMK_GPS.zip": "Flipper Dev-Board w/ JCMK GPS",
-            "LilyGo-T-Deck.zip": "LilyGo T-Deck",
-            "LilyGo-TEmbedC1101.zip": "LilyGo TEmbedC1101",
-            "LilyGo-S3TWatch-2020.zip": "LilyGo S3 T-Watch 2020",
-            "esp32c5-generic.zip": "Generic ESP32-C5",
             "esp32c5-generic-v01.zip": "Generic ESP32-C5 (v01)",
             "LilyGo-TDisplayS3-Touch.zip": "LilyGo TDisplay S3 Touch (ESP32-S3)",
             "RabbitLabs_Minion.zip": "Rabbit Labs' Minion (ESP32)",
@@ -1232,8 +1209,6 @@ document.addEventListener('DOMContentLoaded', () => {
             "esp32c6-generic.zip": "esp32c6",
             "esp32v5_awok.zip": "esp32s2",
             "ghostboard.zip": "esp32c6",
-            "MarauderV4_FlipperHub.zip": "esp32",
-            "MarauderV6_AwokDual.zip": "esp32",
             "AwokMini.zip": "esp32s2",
             "ESP32-S3-Cardputer.zip": "esp32s3",
             "CYD2USB.zip": "esp32",
@@ -1586,7 +1561,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         // Trigger the load function
                         loadGhostEspZip(selectedValue); 
                     
-                    // --- Default Handling (Marauder, etc.) ---
+                    // --- Default Handling ---
                     } else {
                         console.log('[Debug] Non-GhostESP select changed.'); // <<< ADD LOG
                         if (selectedValue) {
@@ -1608,8 +1583,6 @@ document.addEventListener('DOMContentLoaded', () => {
         // --- Remove the early call for GhostESP ---
         // setupDownloadLinkListener(ghostEspVariantSelect, ghostEspDownloadLink); 
         
-        // Keep the early call for Marauder as its section might be simpler
-        setupDownloadLinkListener(marauderVariantSelect, marauderDownloadLink); 
 
         // --- THIS BLOCK IS THE CULPRIT - Commenting it out ---
         /*
@@ -1627,18 +1600,13 @@ document.addEventListener('DOMContentLoaded', () => {
                  }
 
 
-                const allDownloadSections = [ghostEspDownloadSection, marauderDownloadSection];
+                const allDownloadSections = [ghostEspDownloadSection];
                 // Remove download links logic as GhostESP doesn't use it now
-                // const allDownloadLinks = [ghostEspDownloadLink, marauderDownloadLink]; 
+                // const allDownloadLinks = [ghostEspDownloadLink];  
 
                 manualUploadSection.classList.add('d-none');
                 allDownloadSections.forEach(section => section?.classList.add('d-none'));
-                // Clear link states (only marauder needs it now)
-                 if (marauderDownloadLink) {
-                     marauderDownloadLink.href = '#';
-                     marauderDownloadLink.classList.add('disabled');
-                     marauderDownloadLink.classList.replace('btn-primary', 'btn-secondary');
-                 }
+                // Clear link states
 
 
                 if (selectedSource === 'manual') {
@@ -1657,12 +1625,6 @@ document.addEventListener('DOMContentLoaded', () => {
                         .catch(err => {
                             console.error('[Debug] Error during populateRepoOptions for GhostESP:', err); // <<< ADD LOG
                         });
-                } else if (selectedSource === 'marauder') {
-                     console.log('[Debug] Source is marauder, showing section and populating options...'); // <<< ADD LOG
-                    marauderDownloadSection?.classList.remove('d-none');
-                    // Assuming Marauder doesn't need the listener moved, but could add .then() if needed
-                    populateRepoOptions('justcallmekoko', 'ESP32Marauder', 'marauderVariantSelect', '.bin', '-- Select a Marauder BIN... --');
-                }
                 
                 updateFlashSummary(); // Update summary after source change
                 updateButtonStates(); // Update buttons after source change
@@ -1767,72 +1729,31 @@ document.addEventListener('DOMContentLoaded', () => {
             // Reset state if switching
             if (method === 'download') {
                 clearManualInputs(); 
-                // Reset download source dropdown if needed
-                 if (downloadSourceSelect) downloadSourceSelect.value = ''; 
-                 ghostEspDownloadSection?.classList.add('d-none');
-                 marauderDownloadSection?.classList.add('d-none');
+                // Automatically populate GhostESP options
+                ghostEspDownloadSection?.classList.remove('d-none');
+                populateRepoOptions('jaylikesbunda', 'Ghost_ESP', 'ghostEspVariantSelect', '.zip', '-- Select GhostESP Build --', selectedDevice)
+                    .then(() => {
+                        console.log('[Debug] Populated GhostESP options, setting up listener.');
+                        setupDownloadLinkListener(ghostEspVariantSelect, null);
+                    })
+                    .catch(err => {
+                        console.error('[Debug] Error populating GhostESP options:', err);
+                        if (ghostEspStatusElem) {
+                            ghostEspStatusElem.textContent = 'Error loading variants from GitHub.';
+                            ghostEspStatusElem.className = 'form-text text-danger mt-2 error';
+                        }
+                    });
             } else { // method === 'manual'
                 clearExtractedData();
-                // Reset download source dropdown to avoid confusion
-                 if (downloadSourceSelect) downloadSourceSelect.value = ''; 
-                 ghostEspDownloadSection?.classList.add('d-none');
-                 marauderDownloadSection?.classList.add('d-none');
-                 // Maybe auto-select the 'app' toggle?
-                 document.querySelector('.binary-type-toggle .btn[data-binary="app"]')?.click();
+                ghostEspDownloadSection?.classList.add('d-none');
+                // Maybe auto-select the 'app' toggle?
+                document.querySelector('.binary-type-toggle .btn[data-binary="app"]')?.click();
             }
             
             updateFlashSummary(); // Update summary based on new state
             updateButtonStates(); // Update buttons
         }
 
-        // --- NEW: Event Listener for Download Source Selection ---
-        if (downloadSourceSelect) {
-            downloadSourceSelect.addEventListener('change', () => {
-                const selectedSource = downloadSourceSelect.value;
-                console.log(`[Debug] Download source selected: ${selectedSource}`);
-
-                // Hide both subsections initially
-                ghostEspDownloadSection?.classList.add('d-none');
-                marauderDownloadSection?.classList.add('d-none');
-                 if (ghostEspStatusElem) { // Reset GhostESP status text
-                     ghostEspStatusElem.textContent = 'Select a variant to begin loading firmware files.';
-                     ghostEspStatusElem.className = 'form-text text-muted mt-2'; // Reset class
-                 }
-                 clearExtractedData(); // Clear any previously loaded Ghost files
-
-                if (selectedSource === 'ghostesp') {
-                    console.log('[Debug] Showing GhostESP section and populating options...');
-                    ghostEspDownloadSection?.classList.remove('d-none');
-                    populateRepoOptions('jaylikesbunda', 'Ghost_ESP', 'ghostEspVariantSelect', '.zip', '-- Select GhostESP Build --', selectedDevice)
-                        .then(() => {
-                            console.log('[Debug] Populated GhostESP options, setting up listener.');
-                            setupDownloadLinkListener(ghostEspVariantSelect, null); // Pass null instead of undefined ghostEspDownloadLink
-                        })
-                        .catch(err => {
-                            console.error('[Debug] Error populating GhostESP options:', err);
-                            if (ghostEspStatusElem) {
-                                ghostEspStatusElem.textContent = 'Error loading variants from GitHub.';
-                                ghostEspStatusElem.className = 'form-text text-danger mt-2 error';
-                             }
-                        });
-                } else if (selectedSource === 'marauder') {
-                    console.log('[Debug] Showing Marauder section and populating options...');
-                    marauderDownloadSection?.classList.remove('d-none');
-                    populateRepoOptions('justcallmekoko', 'ESP32Marauder', 'marauderVariantSelect', '.bin', '-- Select Marauder Binary --')
-                        .then(() => {
-                             console.log('[Debug] Populated Marauder options.');
-                             // Listener for Marauder download link is already attached (or should be)
-                             // setupDownloadLinkListener(marauderVariantSelect, marauderDownloadLink); // Already called earlier
-                        })
-                         .catch(err => {
-                             console.error('[Debug] Error populating Marauder options:', err);
-                             // Add error feedback for Marauder if needed
-                         });
-                }
-                updateFlashSummary(); // Update summary in case selection changes things
-                updateButtonStates();
-            });
-        }
 
 
         // --- Modify loadGhostEspZip to update status element ---
@@ -1973,8 +1894,8 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         // --- Modify setupDownloadLinkListener ---
-        // Listener for Marauder should still work
-        // Listener for GhostESP is now attached *after* populateRepoOptions finishes in the downloadSourceSelect listener
+        // Listener setup complete
+        // Listener for GhostESP is now attached *after* populateRepoOptions finishes in the selectFirmwareMethod function
         function setupDownloadLinkListener(selectElement, linkElement) {
              // Refined check: selectElement is always required.
              // linkElement is only required if it's NOT the GhostESP select.
@@ -2002,18 +1923,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     // linkElement.classList.add('disabled'); // REMOVED
                     // linkElement.classList.replace('btn-primary', 'btn-secondary'); // REMOVED
                     loadGhostEspZip(selectedValue); 
-                // --- Default Handling (Marauder) ---
-                } else if (selectElement.id === 'marauderVariantSelect') { // Be specific
-                    console.log('[Debug] Marauder select changed.'); 
-                    if (selectedValue) {
-                        linkElement.href = selectedValue;
-                        linkElement.classList.remove('disabled');
-                        linkElement.classList.replace('btn-secondary', 'btn-primary');
-                    } else {
-                        linkElement.href = '#';
-                        linkElement.classList.add('disabled');
-                        linkElement.classList.replace('btn-primary', 'btn-secondary');
-                    }
                 }
             });
              console.log(`[Debug] Attached change listener to ${selectElement.id}`);
@@ -2021,11 +1930,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // --- Remove the early calls for listeners ---
         // setupDownloadLinkListener(ghostEspVariantSelect, ghostEspDownloadLink); 
-        // setupDownloadLinkListener(marauderVariantSelect, marauderDownloadLink); // Call this later too if needed, or ensure elements exist
-
-        // --- Ensure Marauder listener is attached (if elements exist on load) ---
-         // It's safer to attach this listener when the Marauder section becomes visible,
-         // similar to how we handle GhostESP now. Let's adjust that too.
 
         // --- REMOVE OLD firmwareSourceSelect listener ---
         /* 
