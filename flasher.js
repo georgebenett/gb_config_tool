@@ -83,13 +83,13 @@ document.addEventListener('DOMContentLoaded', () => {
         const appAddressInput = getElementById('appAddress');
         const bootloaderAddressInput = getElementById('bootloaderAddress');
         const partitionAddressInput = getElementById('partitionAddress');
-        const ghostEspDownloadSection = getElementById('ghostEspDownloadSection');
+        const gbDownloadSection = getElementById('gbDownloadSection');
         const manualUploadSection = getElementById('manualUploadSection');
         const choiceDownloadCard = getElementById('choiceDownload');
         const choiceManualCard = getElementById('choiceManual');
         const downloadOptionsContainer = getElementById('downloadOptionsContainer');
         const manualUploadContainer = getElementById('manualUploadContainer');
-        const ghostEspStatusElem = getElementById('ghostEspStatus');
+        const gbStatusElem = getElementById('ghostEspStatus');
 
         // --- Let Declarations (Moved Up) ---
         let espLoader = null;
@@ -97,7 +97,7 @@ document.addEventListener('DOMContentLoaded', () => {
         let connected = false;
         let chipType = '';
         let currentStep = 1;
-        let extractedGhostEspFiles = null;
+        let extractedGbFiles = null;
         let selectedFirmwareMethod = null; // To track 'download' or 'manual'
 
         // --- Initial UI State ---
@@ -313,21 +313,21 @@ document.addEventListener('DOMContentLoaded', () => {
             // const source = firmwareSourceSelect.value; // REMOVE THIS
 
             // Check based on the *selected method*
-            if (selectedFirmwareMethod === 'download' && extractedGhostEspFiles) {
-                // Use extracted GhostESP data
-                 if (extractedGhostEspFiles.app.data) {
-                     const address = extractedGhostEspFiles.app.addressInput.value;
-                     addSummaryItem('bi-file-earmark-binary', `Application: ${extractedGhostEspFiles.app.name} at ${address} [Auto]`);
+            if (selectedFirmwareMethod === 'download' && extractedGbFiles) {
+                // Use extracted GB data
+                 if (extractedGbFiles.app.data) {
+                     const address = extractedGbFiles.app.addressInput.value;
+                     addSummaryItem('bi-file-earmark-binary', `Application: ${extractedGbFiles.app.name} at ${address} [Auto]`);
                      hasBinaries = true;
                  }
-                 if (extractedGhostEspFiles.bootloader.data) {
-                     const address = extractedGhostEspFiles.bootloader.addressInput.value;
-                     addSummaryItem('bi-hdd-network', `Bootloader: ${extractedGhostEspFiles.bootloader.name} at ${address} [Auto]`);
+                 if (extractedGbFiles.bootloader.data) {
+                     const address = extractedGbFiles.bootloader.addressInput.value;
+                     addSummaryItem('bi-hdd-network', `Bootloader: ${extractedGbFiles.bootloader.name} at ${address} [Auto]`);
                      hasBinaries = true;
                  }
-                 if (extractedGhostEspFiles.partition.data) {
-                     const address = extractedGhostEspFiles.partition.addressInput.value;
-                     addSummaryItem('bi-table', `Partition Table: ${extractedGhostEspFiles.partition.name} at ${address} [Auto]`);
+                 if (extractedGbFiles.partition.data) {
+                     const address = extractedGbFiles.partition.addressInput.value;
+                     addSummaryItem('bi-table', `Partition Table: ${extractedGbFiles.partition.name} at ${address} [Auto]`);
                      hasBinaries = true;
                  }
             } else if (selectedFirmwareMethod === 'manual') {
@@ -370,8 +370,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
              // Check based on the *selected method*
              if (selectedFirmwareMethod === 'download') {
-                 // If download was chosen, check if Ghost files were extracted
-                 return extractedGhostEspFiles && (extractedGhostEspFiles.app.data || extractedGhostEspFiles.bootloader.data || extractedGhostEspFiles.partition.data);
+                 // If download was chosen, check if GB files were extracted
+                 return extractedGbFiles && (extractedGbFiles.app.data || extractedGbFiles.bootloader.data || extractedGbFiles.partition.data);
              } else if (selectedFirmwareMethod === 'manual') {
                  // Original check for manual files
                  return (appFileInput?.files?.length > 0) ||
@@ -554,11 +554,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 const fileArray = [];
                 const source = selectedFirmwareMethod === 'download' ? 'ghostesp' : 'manual';
 
-                // --- Use extracted GhostESP data if available ---
-                if (source === 'ghostesp' && extractedGhostEspFiles) {
-                    espLoaderTerminal.writeLine("Using auto-loaded GhostESP files...");
-                    for (const key in extractedGhostEspFiles) {
-                        const fileInfo = extractedGhostEspFiles[key];
+                // --- Use extracted GB data if available ---
+                if (source === 'ghostesp' && extractedGbFiles) {
+                    espLoaderTerminal.writeLine("Using auto-loaded GB files...");
+                    for (const key in extractedGbFiles) {
+                        const fileInfo = extractedGbFiles[key];
                         if (fileInfo.data) {
                             // Skip bootloader and partition if preserving settings
                             if (preserveSettings && (key === 'bootloader' || key === 'partition')) {
@@ -1119,68 +1119,6 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         });
 
-        // Add a mapping for nice names (based on the provided YAML)
-        const ghostEspNiceNames = {
-            "esp32-generic.zip": "Generic ESP32",
-            "esp32-generic.zip": "FlipperHub Rocket",
-            "esp32s2-generic.zip": "Generic ESP32-S2",
-            "esp32s3-generic.zip": "Generic ESP32-S3",
-            "esp32c3-generic.zip": "Generic ESP32-C3",
-            "esp32c6-generic.zip": "Generic ESP32-C6",
-            "esp32v5_awok.zip": "Awok V5 (ESP32-S2)",
-            "ghostboard.zip": "Rabbit Labs' GhostBoard (ESP32-C6)",
-            "esp32c5-generic-v01.zip": "Generic ESP32-C5 (v01)",
-            "LilyGo-TDisplayS3-Touch.zip": "LilyGo TDisplay S3 Touch (ESP32-S3)",
-            "RabbitLabs_Minion.zip": "Rabbit Labs' Minion (ESP32)",
-            "JCMK_DevBoardPro.zip": "JCMK DevBoard Pro (ESP32)",
-            "CardputerADV.zip": "Cardputer ADV (ESP32-S3)",
-            "Lolin_S3_Pro.zip": "Lolin S3 Pro (ESP32-S3)"
-        };
-
-        // Mapping from build target (idf_target) to chip name used in 'selectedDevice'
-        const ghostEspChipMapping = {
-            "esp32": "ESP32",
-            "esp32s2": "ESP32-S2",
-            "esp32s3": "ESP32-S3",
-            "esp32c3": "ESP32-C3",
-            "esp32c6": "ESP32-C6",
-            "esp32c5": "ESP32-C5"
-            // Add other mappings if GhostESP supports more chips later
-        };
-
-        // This mapping helps link the zip name back to the target chip
-        const ghostEspZipToTarget = {
-            "esp32-generic.zip": "esp32",
-            "esp32s2-generic.zip": "esp32s2",
-            "esp32s3-generic.zip": "esp32s3",
-            "esp32c3-generic.zip": "esp32c3",
-            "esp32c6-generic.zip": "esp32c6",
-            "esp32v5_awok.zip": "esp32s2",
-            "ghostboard.zip": "esp32c6",
-            "AwokMini.zip": "esp32s2",
-            "ESP32-S3-Cardputer.zip": "esp32s3",
-            "CYD2USB.zip": "esp32",
-            "CYDMicroUSB.zip": "esp32",
-            "CYDDualUSB.zip": "esp32",
-            "CYD2USB2.4Inch.zip": "esp32",
-            "CYD2USB2.4Inch_C.zip": "esp32",
-            "CYD2432S028R.zip": "esp32",
-            "Waveshare_LCD.zip": "esp32s3",
-            "Crowtech_LCD.zip": "esp32s3",
-            "Sunton_LCD.zip": "esp32s3",
-            "JC3248W535EN_LCD.zip": "esp32s3",
-            "Flipper_JCMK_GPS.zip": "esp32s2",
-            "LilyGo-T-Deck.zip": "esp32s3",
-            "LilyGo-TEmbedC1101.zip": "esp32s3",
-            "LilyGo-S3TWatch-2020.zip": "esp32s3",
-            "esp32c5-generic.zip": "esp32c5",
-            "esp32c5-generic-v01.zip": "esp32c5",
-            "LilyGo-TDisplayS3-Touch.zip": "esp32s3",
-            "JCMK_DevBoardPro.zip": "esp32",
-            "RabbitLabs_Minion.zip": "esp32",
-            "CardputerADV.zip": "esp32s3",
-            "Lolin_S3_Pro.zip": "esp32s3"
-        };
 
         // --- Helper function to populate assets into a parent element ---
         function populateAssets(assets, parentElement, fileExtension, filterChip, repo) {
@@ -1191,60 +1129,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
             assets.forEach(asset => {
                 if (asset.name.endsWith(fileExtension)) {
-                    // --- Filtering Logic for GhostESP ---
-                    if (repo === 'Ghost_ESP' && filterChip) {
-                        const assetTarget = ghostEspZipToTarget[asset.name];
-                        const mappedChip = ghostEspChipMapping[assetTarget];
-                        if (mappedChip !== filterChip) {
-                            return; // Skip this asset if it doesn't match the selected chip
-                        }
-                    }
-                    // --- End Filtering Logic ---
-
-                    // --- Special Handling for esp32-generic.zip ---
-                    if (repo === 'Ghost_ESP' && asset.name === "esp32-generic.zip") {
-                        // Manually create both options for this specific ZIP
-                        const option1 = document.createElement('option');
-                        option1.value = asset.browser_download_url;
-                        option1.textContent = "Generic ESP32";
-                        parentElement.appendChild(option1);
-
-                        const option2 = document.createElement('option');
-                        option2.value = asset.browser_download_url;
-                        option2.textContent = "FlipperHub Rocket"; // Use the second name
-                        parentElement.appendChild(option2);
-
-                        foundFiles = true;
-                        return; // Skip the default processing below for this asset
-                    }
-                    // --- End Special Handling ---
-
-                    // --- Special Handling for CYD2USB2.4Inch.zip ---
-                    if (repo === 'Ghost_ESP' && asset.name === "CYD2USB2.4Inch.zip") {
-                        const option1 = document.createElement('option');
-                        option1.value = asset.browser_download_url;
-                        option1.textContent = "CYD 2.4 Inch USB (ESP32)";
-                        parentElement.appendChild(option1);
-
-                        const option2 = document.createElement('option');
-                        option2.value = asset.browser_download_url;
-                        option2.textContent = "Rabbit Labs' Phantom";
-                        parentElement.appendChild(option2);
-
-                        foundFiles = true;
-                        return;
-                    }
-                    // --- End Special Handling ---
-
-                    // --- Default processing for other assets ---
+                    // --- Default processing for assets ---
                     foundFiles = true;
                     const option = document.createElement('option');
                     option.value = asset.browser_download_url;
-
-                    // Use nice name if available for GhostESP, otherwise use asset name
-                    option.textContent = (repo === 'Ghost_ESP' && ghostEspNiceNames[asset.name])
-                                         ? ghostEspNiceNames[asset.name]
-                                         : asset.name;
+                    option.textContent = asset.name;
 
                     parentElement.appendChild(option);
                 }
@@ -1341,18 +1230,18 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
 
-        // --- NEW FUNCTION: Load and process GhostESP ZIP ---
-        async function loadGhostEspZip(zipUrl) {
-            console.log(`[Debug] loadGhostEspZip called with original URL: ${zipUrl}`); // Log original URL
+        // --- NEW FUNCTION: Load and process GB ZIP ---
+        async function loadGbZip(zipUrl) {
+            console.log(`[Debug] loadGbZip called with original URL: ${zipUrl}`); // Log original URL
             if (!zipUrl) {
-                console.log('[Debug] loadGhostEspZip: No URL provided, clearing data.');
-                extractedGhostEspFiles = null;
+                console.log('[Debug] loadGbZip: No URL provided, clearing data.');
+                extractedGbFiles = null;
                 updateBinaryTypeIndicators();
                 updateFlashSummary();
                 updateButtonStates();
-                if (ghostEspStatusElem) {
-                    ghostEspStatusElem.textContent = 'Select a variant to begin loading firmware files.';
-                    ghostEspStatusElem.className = 'form-text text-muted mt-2';
+                if (gbStatusElem) {
+                    gbStatusElem.textContent = 'Select a variant to begin loading firmware files.';
+                    gbStatusElem.className = 'form-text text-muted mt-2';
                 }
                 return;
             }
@@ -1368,21 +1257,21 @@ document.addEventListener('DOMContentLoaded', () => {
             // Use the first proxy URL for now (AllOrigins supports CORS)
             const proxyUrl = proxyUrls[0];
             console.log(`[Debug] Using CF Worker proxy URL: ${proxyUrl}`); // Log proxy URL
-            espLoaderTerminal.writeLine(`Fetching GhostESP firmware via proxy from ${zipUrl}...`);
+            espLoaderTerminal.writeLine(`Fetching firmware via proxy from ${zipUrl}...`);
 
             // Disable download during processing
             if (choiceDownloadCard) choiceDownloadCard.style.pointerEvents = 'none';
 
-            extractedGhostEspFiles = null;
+            extractedGbFiles = null;
 
             // --- Update Status UI ---
-            if (ghostEspStatusElem) {
-                ghostEspStatusElem.textContent = 'Fetching ZIP from GitHub...';
-                ghostEspStatusElem.className = 'form-text mt-2 loading'; // Add loading class
+            if (gbStatusElem) {
+                gbStatusElem.textContent = 'Fetching ZIP from GitHub...';
+                gbStatusElem.className = 'form-text mt-2 loading'; // Add loading class
             }
 
             try {
-                console.log('[Debug] loadGhostEspZip: Starting fetch via proxy...');
+                console.log('[Debug] loadGbZip: Starting fetch via proxy...');
 
                 // Try multiple proxy services if one fails
                 let response = null;
@@ -1433,20 +1322,20 @@ document.addEventListener('DOMContentLoaded', () => {
                          }
                     } catch (e) { /* Ignore errors reading body */ }
                      console.error(`[Debug] Proxy fetch error: ${proxyErrorDetails}`);
-                     if (ghostEspStatusElem) {
-                         ghostEspStatusElem.textContent = `Error fetching: ${response?.status || 'unknown'}`;
-                         ghostEspStatusElem.className = 'form-text text-danger mt-2 error';
+                     if (gbStatusElem) {
+                         gbStatusElem.textContent = `Error fetching: ${response?.status || 'unknown'}`;
+                         gbStatusElem.className = 'form-text text-danger mt-2 error';
                      }
                      throw new Error(proxyErrorDetails);
                 }
 
                 const zipBlob = await response.blob();
-                console.log(`[Debug] loadGhostEspZip: Downloaded Blob size: ${zipBlob.size}`);
+                console.log(`[Debug] loadGbZip: Downloaded Blob size: ${zipBlob.size}`);
                 if (zipBlob.size === 0) {
                     throw new Error("Downloaded ZIP file is empty. Proxy or original link might be broken.");
                 }
                  // Check Blob type - should be application/zip or octet-stream generally
-                 console.log(`[Debug] loadGhostEspZip: Downloaded Blob type: ${zipBlob.type}`);
+                 console.log(`[Debug] loadGbZip: Downloaded Blob type: ${zipBlob.type}`);
                  if (zipBlob.type && !zipBlob.type.includes('zip') && !zipBlob.type.includes('octet-stream') && !zipBlob.type.includes('binary')) {
                      // Suspicious type, might be an error page from the proxy or GitHub
                      try {
@@ -1458,11 +1347,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 espLoaderTerminal.writeLine(`Downloaded ${Math.round(zipBlob.size / 1024)} KB ZIP. Extracting...`);
 
-                if (ghostEspStatusElem) ghostEspStatusElem.textContent = 'Download complete. Extracting files...';
+                if (gbStatusElem) gbStatusElem.textContent = 'Download complete. Extracting files...';
 
-                console.log('[Debug] loadGhostEspZip: Loading ZIP with JSZip...');
+                console.log('[Debug] loadGbZip: Loading ZIP with JSZip...');
                 const zip = await JSZip.loadAsync(zipBlob);
-                console.log('[Debug] loadGhostEspZip: JSZip loaded successfully.');
+                console.log('[Debug] loadGbZip: JSZip loaded successfully.');
 
                 // --- Files to extract ---
                 const filesToExtract = {
@@ -1472,10 +1361,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 };
 
                 let foundCount = 0;
-                console.log('[Debug] loadGhostEspZip: Starting file extraction loop...');
+                console.log('[Debug] loadGbZip: Starting file extraction loop...');
                 for (const key in filesToExtract) {
                     const target = filesToExtract[key];
-                    console.log(`[Debug] loadGhostEspZip: Checking for file: ${target.name}`);
+                    console.log(`[Debug] loadGbZip: Checking for file: ${target.name}`);
 
                     // Try the primary name first
                     let fileEntry = zip.file(target.name);
@@ -1506,10 +1395,10 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
 
                     if (fileEntry) {
-                        console.log(`[Debug] loadGhostEspZip: Found ${target.name}, extracting data...`);
+                        console.log(`[Debug] loadGbZip: Found ${target.name}, extracting data...`);
                         target.data = await fileEntry.async("arraybuffer");
                         const fileSizeKB = Math.round(target.data.byteLength / 1024);
-                         console.log(`[Debug] loadGhostEspZip: Extracted ${target.name}, size: ${fileSizeKB} KB. Updating UI...`);
+                         console.log(`[Debug] loadGbZip: Extracted ${target.name}, size: ${fileSizeKB} KB. Updating UI...`);
                         if (target.elem) {
                              target.elem.textContent = `${target.name} (${fileSizeKB} KB) [Auto-Loaded]`;
                              const dropZone = target.elem.closest('.firmware-section')?.querySelector('.custom-file-upload');
@@ -1518,7 +1407,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         espLoaderTerminal.writeLine(`Found ${target.name} (${fileSizeKB} KB)`);
                         foundCount++;
                     } else {
-                         console.log(`[Debug] loadGhostEspZip: File not found in ZIP: ${target.name}`);
+                         console.log(`[Debug] loadGbZip: File not found in ZIP: ${target.name}`);
                          if (target.elem) {
                             target.elem.textContent = 'Not found in ZIP';
                              const dropZone = target.elem.closest('.firmware-section')?.querySelector('.custom-file-upload');
@@ -1527,14 +1416,14 @@ document.addEventListener('DOMContentLoaded', () => {
                          espLoaderTerminal.writeLine(`Warning: ${target.name} not found in the ZIP.`);
                     }
                 }
-                console.log(`[Debug] loadGhostEspZip: Extraction loop finished. Found count: ${foundCount}`);
+                console.log(`[Debug] loadGbZip: Extraction loop finished. Found count: ${foundCount}`);
 
                 if (foundCount > 0) {
-                     extractedGhostEspFiles = filesToExtract;
+                     extractedGbFiles = filesToExtract;
                      espLoaderTerminal.writeLine("Extraction complete. Files ready.");
-                     if (ghostEspStatusElem) {
-                         ghostEspStatusElem.textContent = `Successfully loaded ${foundCount} files`;
-                         ghostEspStatusElem.className = 'form-text text-success mt-2 success';
+                     if (gbStatusElem) {
+                         gbStatusElem.textContent = `Successfully loaded ${foundCount} files`;
+                         gbStatusElem.className = 'form-text text-success mt-2 success';
                      }
                      updateBinaryTypeIndicators();
                      updateFlashSummary();
@@ -1542,20 +1431,20 @@ document.addEventListener('DOMContentLoaded', () => {
                     // If we downloaded something but didn't find the files, clear UI state
                      clearExtractedData();
                      updateFlashSummary();
-                     if (ghostEspStatusElem) {
-                         ghostEspStatusElem.textContent = 'Error: No required .bin files found in ZIP.';
-                         ghostEspStatusElem.className = 'form-text text-danger mt-2 error';
+                     if (gbStatusElem) {
+                         gbStatusElem.textContent = 'Error: No required .bin files found in ZIP.';
+                         gbStatusElem.className = 'form-text text-danger mt-2 error';
                      }
                     throw new Error("No required .bin files found in the downloaded ZIP.");
                 }
 
             } catch (error) {
-                console.error("[Debug] Error loading or extracting GhostESP ZIP:", error);
-                espLoaderTerminal.writeLine(`❌ Error processing GhostESP ZIP: ${error.message}`);
-                extractedGhostEspFiles = null;
-                if (ghostEspStatusElem) {
-                    ghostEspStatusElem.textContent = `Error: ${error.message}`;
-                    ghostEspStatusElem.className = 'form-text text-danger mt-2 error';
+                console.error("[Debug] Error loading or extracting GB ZIP:", error);
+                espLoaderTerminal.writeLine(`❌ Error processing GB ZIP: ${error.message}`);
+                extractedGbFiles = null;
+                if (gbStatusElem) {
+                    gbStatusElem.textContent = `Error: ${error.message}`;
+                    gbStatusElem.className = 'form-text text-danger mt-2 error';
                 }
                  if (appFileInfoElem) appFileInfoElem.textContent = 'ZIP Load Failed';
                  if (bootloaderFileInfoElem) bootloaderFileInfoElem.textContent = 'ZIP Load Failed';
@@ -1563,32 +1452,32 @@ document.addEventListener('DOMContentLoaded', () => {
                  document.querySelectorAll('.custom-file-upload.file-uploaded').forEach(el => el.classList.remove('file-uploaded'));
                  updateBinaryTypeIndicators(); // Clear badges on error
             } finally {
-                console.log('[Debug] loadGhostEspZip: Finally block reached. Re-enabling select.');
+                console.log('[Debug] loadGbZip: Finally block reached. Re-enabling select.');
                  if (choiceDownloadCard) choiceDownloadCard.style.pointerEvents = 'auto';
                 updateButtonStates();
             }
         }
 
-        // --- Modify setupDownloadLinkListener to handle the GhostESP case ---
+        // --- Modify setupDownloadLinkListener to handle the GB case ---
         function setupDownloadLinkListener(selectElement, linkElement) {
             if (selectElement && linkElement) {
                 selectElement.addEventListener('change', () => {
                     const selectedValue = selectElement.value;
                     console.log(`[Debug] Select changed for ID: ${selectElement.id}, Value: ${selectedValue}`); // <<< ADD LOG
 
-                    // --- GhostESP Special Handling ---
+                    // --- GB Special Handling ---
                     if (selectElement.id === 'downloadGbRemoteBtn') {
-                        console.log('[Debug] GhostESP variant selected, attempting load...'); // <<< ADD LOG
-                        linkElement.href = '#'; // Keep link disabled for GhostESP
+                        console.log('[Debug] GB variant selected, attempting load...'); // <<< ADD LOG
+                        linkElement.href = '#'; // Keep link disabled for GB
                         linkElement.classList.add('disabled');
                         linkElement.classList.replace('btn-primary', 'btn-secondary');
 
                         // Trigger the load function
-                        loadGhostEspZip(selectedValue);
+                        loadGbZip(selectedValue);
 
                     // --- Default Handling ---
                     } else {
-                        console.log('[Debug] Non-GhostESP select changed.'); // <<< ADD LOG
+                        console.log('[Debug] Non-GB select changed.'); // <<< ADD LOG
                         if (selectedValue) {
                             linkElement.href = selectedValue;
                         linkElement.classList.remove('disabled');
@@ -1605,7 +1494,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
 
-        // --- Remove the early call for GhostESP ---
+        // --- Remove the early call for GB ---
         // setupDownloadLinkListener(ghostEspVariantSelect, ghostEspDownloadLink);
 
 
@@ -1625,8 +1514,8 @@ document.addEventListener('DOMContentLoaded', () => {
                  }
 
 
-                const allDownloadSections = [ghostEspDownloadSection];
-                // Remove download links logic as GhostESP doesn't use it now
+                const allDownloadSections = [gbDownloadSection];
+                // Remove download links logic as GB doesn't use it now
                 // const allDownloadLinks = [ghostEspDownloadLink];
 
                 manualUploadSection.classList.add('d-none');
@@ -1639,7 +1528,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     manualUploadSection.classList.remove('d-none');
                 } else if (selectedSource === 'ghostesp') {
                      console.log('[Debug] Source is ghostesp, showing section and populating options...'); // <<< ADD LOG
-                    ghostEspDownloadSection?.classList.remove('d-none');
+                    gbDownloadSection?.classList.remove('d-none');
 
                 updateFlashSummary(); // Update summary after source change
                 updateButtonStates(); // Update buttons after source change
@@ -1667,9 +1556,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // --- Helper to clear extracted data ---
         function clearExtractedData() {
-            if (extractedGhostEspFiles) {
+            if (extractedGbFiles) {
                 // Clear the stored data
-                extractedGhostEspFiles = null;
+                extractedGbFiles = null;
                 // Optionally clear the UI text if it was set by extraction
                 // Check if the current text indicates it was auto-loaded before clearing
                 if (appFileInfoElem?.textContent.includes('[Auto-Loaded]')) appFileInfoElem.textContent = 'No file selected';
@@ -1678,7 +1567,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 // Clear visual indicators
                 document.querySelectorAll('.custom-file-upload.file-uploaded').forEach(el => el.classList.remove('file-uploaded'));
                 updateBinaryTypeIndicators();
-                espLoaderTerminal.writeLine("Cleared auto-loaded GhostESP files.");
+                espLoaderTerminal.writeLine("Cleared auto-loaded GB files.");
             }
         }
 
@@ -1694,10 +1583,10 @@ document.addEventListener('DOMContentLoaded', () => {
             let hasApp = false, hasBootloader = false, hasPartition = false;
 
             // Check based on the selected method
-            if (method === 'download' && extractedGhostEspFiles) {
-                hasApp = !!extractedGhostEspFiles.app.data;
-                hasBootloader = !!extractedGhostEspFiles.bootloader.data;
-                hasPartition = !!extractedGhostEspFiles.partition.data;
+            if (method === 'download' && extractedGbFiles) {
+                hasApp = !!extractedGbFiles.app.data;
+                hasBootloader = !!extractedGbFiles.bootloader.data;
+                hasPartition = !!extractedGbFiles.partition.data;
             } else if (method === 'manual') { // Check the manual method
                  hasApp = appFileInput?.files?.length > 0;
                  hasBootloader = bootloaderFileInput?.files?.length > 0;
@@ -1746,13 +1635,13 @@ document.addEventListener('DOMContentLoaded', () => {
             if (method === 'download') {
                 clearManualInputs();
                 // Show download section
-                ghostEspDownloadSection?.classList.remove('d-none');
+                gbDownloadSection?.classList.remove('d-none');
 
                 // Automatically download and extract files
                 downloadAndExtractFiles();
             } else { // method === 'manual'
                 clearExtractedData();
-                ghostEspDownloadSection?.classList.add('d-none');
+                gbDownloadSection?.classList.add('d-none');
                 // Maybe auto-select the 'app' toggle?
                 document.querySelector('.binary-type-toggle .btn[data-binary="app"]')?.click();
             }
@@ -1765,9 +1654,9 @@ document.addEventListener('DOMContentLoaded', () => {
         async function downloadAndExtractFiles() {
             try {
                 // Update status
-                if (ghostEspStatusElem) {
-                    ghostEspStatusElem.textContent = 'Fetching latest release from georgebenett/gb_remote...';
-                    ghostEspStatusElem.className = 'form-text mt-2 loading';
+                if (gbStatusElem) {
+                    gbStatusElem.textContent = 'Fetching latest release from georgebenett/gb_remote...';
+                    gbStatusElem.className = 'form-text mt-2 loading';
                 }
 
                 // Get the latest release URL for gb_remote_lite.zip
@@ -1799,14 +1688,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 espLoaderTerminal.writeLine(`Found firmware zip file "${zipAsset.name}" in release ${release.tag_name}`);
 
                 // Download and extract the ZIP
-                await loadGhostEspZip(zipAsset.browser_download_url);
+                await loadGbZip(zipAsset.browser_download_url);
 
             } catch (error) {
                 console.error('Error downloading GB Remote Lite firmware:', error);
                 espLoaderTerminal.writeLine(`❌ Error downloading firmware: ${error.message}`);
-                if (ghostEspStatusElem) {
-                    ghostEspStatusElem.textContent = `Error: ${error.message}`;
-                    ghostEspStatusElem.className = 'form-text text-danger mt-2 error';
+                if (gbStatusElem) {
+                    gbStatusElem.textContent = `Error: ${error.message}`;
+                    gbStatusElem.className = 'form-text text-danger mt-2 error';
                 }
             }
         }
@@ -1830,8 +1719,8 @@ document.addEventListener('DOMContentLoaded', () => {
         function hasFirmwareFilesSelected() {
              // Check based on the *selected method*
              if (selectedFirmwareMethod === 'download') {
-                 // If download was chosen, check if Ghost files were extracted
-                 return extractedGhostEspFiles && (extractedGhostEspFiles.app.data || extractedGhostEspFiles.bootloader.data || extractedGhostEspFiles.partition.data);
+                 // If download was chosen, check if GB files were extracted
+                 return extractedGbFiles && (extractedGbFiles.app.data || extractedGbFiles.bootloader.data || extractedGbFiles.partition.data);
              } else if (selectedFirmwareMethod === 'manual') {
                  // Original check for manual files
                  return (appFileInput?.files?.length > 0) ||
@@ -1851,21 +1740,21 @@ document.addEventListener('DOMContentLoaded', () => {
             };
 
             // Check based on the *selected method*
-            if (selectedFirmwareMethod === 'download' && extractedGhostEspFiles) {
-                // Use extracted GhostESP data
-                 if (extractedGhostEspFiles.app.data) {
-                     const address = extractedGhostEspFiles.app.addressInput.value;
-                     addSummaryItem('bi-file-earmark-binary', `Application: ${extractedGhostEspFiles.app.name} at ${address} [Auto]`);
+            if (selectedFirmwareMethod === 'download' && extractedGbFiles) {
+                // Use extracted GB data
+                 if (extractedGbFiles.app.data) {
+                     const address = extractedGbFiles.app.addressInput.value;
+                     addSummaryItem('bi-file-earmark-binary', `Application: ${extractedGbFiles.app.name} at ${address} [Auto]`);
                      hasBinaries = true;
                  }
-                 if (extractedGhostEspFiles.bootloader.data) {
-                     const address = extractedGhostEspFiles.bootloader.addressInput.value;
-                     addSummaryItem('bi-hdd-network', `Bootloader: ${extractedGhostEspFiles.bootloader.name} at ${address} [Auto]`);
+                 if (extractedGbFiles.bootloader.data) {
+                     const address = extractedGbFiles.bootloader.addressInput.value;
+                     addSummaryItem('bi-hdd-network', `Bootloader: ${extractedGbFiles.bootloader.name} at ${address} [Auto]`);
                      hasBinaries = true;
                  }
-                 if (extractedGhostEspFiles.partition.data) {
-                     const address = extractedGhostEspFiles.partition.addressInput.value;
-                     addSummaryItem('bi-table', `Partition Table: ${extractedGhostEspFiles.partition.name} at ${address} [Auto]`);
+                 if (extractedGbFiles.partition.data) {
+                     const address = extractedGbFiles.partition.addressInput.value;
+                     addSummaryItem('bi-table', `Partition Table: ${extractedGbFiles.partition.name} at ${address} [Auto]`);
                      hasBinaries = true;
                  }
             } else if (selectedFirmwareMethod === 'manual') {
@@ -1930,10 +1819,10 @@ document.addEventListener('DOMContentLoaded', () => {
             let hasApp = false, hasBootloader = false, hasPartition = false;
 
             // Only show badges based on the *current* state, respecting selected method
-            if (selectedFirmwareMethod === 'download' && extractedGhostEspFiles) {
-                hasApp = !!extractedGhostEspFiles.app.data;
-                hasBootloader = !!extractedGhostEspFiles.bootloader.data;
-                hasPartition = !!extractedGhostEspFiles.partition.data;
+            if (selectedFirmwareMethod === 'download' && extractedGbFiles) {
+                hasApp = !!extractedGbFiles.app.data;
+                hasBootloader = !!extractedGbFiles.bootloader.data;
+                hasPartition = !!extractedGbFiles.partition.data;
             } else if (selectedFirmwareMethod === 'manual') {
                  hasApp = appFileInput?.files?.length > 0;
                  hasBootloader = bootloaderFileInput?.files?.length > 0;
