@@ -1704,19 +1704,29 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
 
                 const release = await response.json();
-                const zipAsset = release.assets.find(asset => asset.name === 'gb_remote_lite.zip');
 
+                // Look for assets matching the actual naming pattern: "gb_remote_lite_vX.X.X.zip"
+                // First try to find an asset that starts with "gb_remote_lite_v" and ends with ".zip"
+                let zipAsset = release.assets.find(asset =>
+                    asset.name.startsWith('gb_remote_lite_v') && asset.name.endsWith('.zip')
+                );
+
+                // Fallback to the old naming pattern for backward compatibility
                 if (!zipAsset) {
-                    throw new Error('gb_remote_lite.zip not found in latest release');
+                    zipAsset = release.assets.find(asset => asset.name === 'gb_remote_lite.zip');
                 }
 
-                espLoaderTerminal.writeLine(`Found gb_remote_lite.zip in release ${release.tag_name}`);
+                if (!zipAsset) {
+                    throw new Error('GB Remote Lite firmware zip file not found in latest release');
+                }
+
+                espLoaderTerminal.writeLine(`Found firmware zip file "${zipAsset.name}" in release ${release.tag_name}`);
 
                 // Download and extract the ZIP
                 await loadGhostEspZip(zipAsset.browser_download_url);
 
             } catch (error) {
-                console.error('Error downloading gb_remote_lite.zip:', error);
+                console.error('Error downloading GB Remote Lite firmware:', error);
                 espLoaderTerminal.writeLine(`❌ Error downloading firmware: ${error.message}`);
                 if (ghostEspStatusElem) {
                     ghostEspStatusElem.textContent = `Error: ${error.message}`;
