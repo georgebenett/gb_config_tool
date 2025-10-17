@@ -1273,6 +1273,16 @@ document.addEventListener('DOMContentLoaded', () => {
             try {
                 console.log('[Debug] loadGbZip: Starting fetch via proxy...');
 
+                // Helper function to add timeout to fetch requests
+                const fetchWithTimeout = (url, timeoutMs = 5000) => {
+                    return Promise.race([
+                        fetch(url),
+                        new Promise((_, reject) =>
+                            setTimeout(() => reject(new Error(`Request timeout after ${timeoutMs}ms`)), timeoutMs)
+                        )
+                    ]);
+                };
+
                 // Try multiple proxy services if one fails
                 let response = null;
                 let lastError = null;
@@ -1280,7 +1290,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 for (let i = 0; i < proxyUrls.length; i++) {
                     try {
                         console.log(`[Debug] Trying proxy ${i + 1}/${proxyUrls.length}: ${proxyUrls[i]}`);
-                        response = await fetch(proxyUrls[i]);
+                        response = await fetchWithTimeout(proxyUrls[i], 5000);
                         console.log(`[Debug] Proxy ${i + 1} response status: ${response.status}, ok: ${response.ok}`);
 
                         if (response.ok) {
@@ -1296,6 +1306,15 @@ document.addEventListener('DOMContentLoaded', () => {
                     } catch (error) {
                         console.log(`[Debug] Proxy ${i + 1} error: ${error.message}`);
                         lastError = error;
+
+                        // Update status for timeout errors
+                        if (error.message.includes('timeout')) {
+                            if (gbStatusElem) {
+                                gbStatusElem.textContent = `Proxy ${i + 1} timed out, trying next...`;
+                                gbStatusElem.className = 'form-text text-warning mt-2';
+                            }
+                        }
+
                         if (i === proxyUrls.length - 1) {
                             // Last proxy failed, throw the last error
                             throw lastError;
