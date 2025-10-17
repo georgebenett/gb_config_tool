@@ -1350,12 +1350,23 @@ document.addEventListener('DOMContentLoaded', () => {
                 updateBinaryTypeIndicators();
                 updateFlashSummary();
                 updateButtonStates();
+                if (ghostEspStatusElem) {
+                    ghostEspStatusElem.textContent = 'Select a variant to begin loading firmware files.';
+                    ghostEspStatusElem.className = 'form-text text-muted mt-2';
+                }
                 return;
             }
 
-            // --- Use YOUR Cloudflare Worker Proxy ---
-            // const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(zipUrl)}`; // OLD
-            const proxyUrl = `https://fragrant-flower-ba0b.creepersbeast.workers.dev/?url=${encodeURIComponent(zipUrl)}`; // UPDATED with your worker URL
+            // --- Use CORS-enabled proxy services ---
+            // Try multiple proxy services for better reliability
+            const proxyUrls = [
+                `https://api.allorigins.win/raw?url=${encodeURIComponent(zipUrl)}`, // AllOrigins - supports CORS
+                `https://cors-anywhere.herokuapp.com/${zipUrl}`, // CORS Anywhere
+                `https://fragrant-flower-ba0b.creepersbeast.workers.dev/?url=${encodeURIComponent(zipUrl)}` // Your CF Worker (fallback)
+            ];
+
+            // Use the first proxy URL for now (AllOrigins supports CORS)
+            const proxyUrl = proxyUrls[0];
             console.log(`[Debug] Using CF Worker proxy URL: ${proxyUrl}`); // Log proxy URL
             espLoaderTerminal.writeLine(`Fetching GhostESP firmware via proxy from ${zipUrl}...`);
 
@@ -1364,18 +1375,51 @@ document.addEventListener('DOMContentLoaded', () => {
 
             extractedGhostEspFiles = null;
 
+            // --- Update Status UI ---
+            if (ghostEspStatusElem) {
+                ghostEspStatusElem.textContent = 'Fetching ZIP from GitHub...';
+                ghostEspStatusElem.className = 'form-text mt-2 loading'; // Add loading class
+            }
+
             try {
                 console.log('[Debug] loadGhostEspZip: Starting fetch via proxy...');
-                // --- Fetch using the proxy URL ---
-                const response = await fetch(proxyUrl);
-                console.log(`[Debug] loadGhostEspZip: Fetch response status: ${response.status}, ok: ${response.ok}`);
+
+                // Try multiple proxy services if one fails
+                let response = null;
+                let lastError = null;
+
+                for (let i = 0; i < proxyUrls.length; i++) {
+                    try {
+                        console.log(`[Debug] Trying proxy ${i + 1}/${proxyUrls.length}: ${proxyUrls[i]}`);
+                        response = await fetch(proxyUrls[i]);
+                        console.log(`[Debug] Proxy ${i + 1} response status: ${response.status}, ok: ${response.ok}`);
+
+                        if (response.ok) {
+                            console.log(`[Debug] Successfully fetched via proxy ${i + 1}`);
+                            break; // Success, exit the loop
+                        } else {
+                            console.log(`[Debug] Proxy ${i + 1} failed with status: ${response.status}`);
+                            if (i === proxyUrls.length - 1) {
+                                // Last proxy failed, throw error
+                                throw new Error(`All proxies failed. Last error: ${response.status}`);
+                            }
+                        }
+                    } catch (error) {
+                        console.log(`[Debug] Proxy ${i + 1} error: ${error.message}`);
+                        lastError = error;
+                        if (i === proxyUrls.length - 1) {
+                            // Last proxy failed, throw the last error
+                            throw lastError;
+                        }
+                    }
+                }
 
                 // Check if the proxy itself had an issue or if the proxied request failed
-                if (!response.ok) {
+                if (!response || !response.ok) {
                     // Try to get error details from the proxy response if available
-                    let proxyErrorDetails = `Proxy fetch failed with status: ${response.status}`;
+                    let proxyErrorDetails = `Proxy fetch failed with status: ${response?.status || 'unknown'}`;
                     try {
-                        const errorText = await response.text();
+                        const errorText = await response?.text();
                          // AllOrigins might return JSON with error details
                          try {
                              const errorJson = JSON.parse(errorText);
@@ -1389,6 +1433,10 @@ document.addEventListener('DOMContentLoaded', () => {
                          }
                     } catch (e) { /* Ignore errors reading body */ }
                      console.error(`[Debug] Proxy fetch error: ${proxyErrorDetails}`);
+                     if (ghostEspStatusElem) {
+                         ghostEspStatusElem.textContent = `Error fetching: ${response?.status || 'unknown'}`;
+                         ghostEspStatusElem.className = 'form-text text-danger mt-2 error';
+                     }
                      throw new Error(proxyErrorDetails);
                 }
 
@@ -1410,15 +1458,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 espLoaderTerminal.writeLine(`Downloaded ${Math.round(zipBlob.size / 1024)} KB ZIP. Extracting...`);
 
+                if (ghostEspStatusElem) ghostEspStatusElem.textContent = 'Download complete. Extracting files...';
+
                 console.log('[Debug] loadGhostEspZip: Loading ZIP with JSZip...');
                 const zip = await JSZip.loadAsync(zipBlob);
                 console.log('[Debug] loadGhostEspZip: JSZip loaded successfully.');
 
                 // --- Files to extract ---
                 const filesToExtract = {
-                    app: { name: 'Ghost_ESP_IDF.bin', data: null, elem: appFileInfoElem, addressInput: appAddressInput, type: 'Application' }, // Corrected name
-                    bootloader: { name: 'bootloader.bin', data: null, elem: bootloaderFileInfoElem, addressInput: bootloaderAddressInput, type: 'Bootloader' }, // Seems correct
-                    partition: { name: 'partition-table.bin', data: null, elem: partitionFileInfoElem, addressInput: partitionAddressInput, type: 'Partition' } // Corrected name
+                    app: { name: 'gb_controller_lite.bin', data: null, elem: appFileInfoElem, addressInput: appAddressInput, type: 'Application' }, // Updated for gb_remote
+                    bootloader: { name: 'bootloader.bin', data: null, elem: bootloaderFileInfoElem, addressInput: bootloaderAddressInput, type: 'Bootloader' }, // Correct
+                    partition: { name: 'partition-table.bin', data: null, elem: partitionFileInfoElem, addressInput: partitionAddressInput, type: 'Partition' } // Correct
                 };
 
                 let foundCount = 0;
@@ -1433,11 +1483,25 @@ document.addEventListener('DOMContentLoaded', () => {
                     // If not found, try alternative names for specific file types
                     if (!fileEntry) {
                         if (key === 'app') {
-                            fileEntry = zip.file('firmware.bin');
-                            if (fileEntry) target.name = 'firmware.bin';
+                            // Try various possible names for the main application
+                            const appNames = ['firmware.bin', 'gb_controller_lite.bin', 'gb_remote_lite.bin', 'app.bin', 'main.bin'];
+                            for (const altName of appNames) {
+                                fileEntry = zip.file(altName);
+                                if (fileEntry) {
+                                    target.name = altName;
+                                    break;
+                                }
+                            }
                         } else if (key === 'partition') {
-                            fileEntry = zip.file('partitions.bin');
-                            if (fileEntry) target.name = 'partitions.bin';
+                            // Try alternative partition table names
+                            const partitionNames = ['partitions.bin', 'partition-table.bin', 'partition.bin'];
+                            for (const altName of partitionNames) {
+                                fileEntry = zip.file(altName);
+                                if (fileEntry) {
+                                    target.name = altName;
+                                    break;
+                                }
+                            }
                         }
                     }
 
@@ -1468,12 +1532,20 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (foundCount > 0) {
                      extractedGhostEspFiles = filesToExtract;
                      espLoaderTerminal.writeLine("Extraction complete. Files ready.");
+                     if (ghostEspStatusElem) {
+                         ghostEspStatusElem.textContent = `Successfully loaded ${foundCount} files`;
+                         ghostEspStatusElem.className = 'form-text text-success mt-2 success';
+                     }
                      updateBinaryTypeIndicators();
                      updateFlashSummary();
                 } else {
                     // If we downloaded something but didn't find the files, clear UI state
                      clearExtractedData();
                      updateFlashSummary();
+                     if (ghostEspStatusElem) {
+                         ghostEspStatusElem.textContent = 'Error: No required .bin files found in ZIP.';
+                         ghostEspStatusElem.className = 'form-text text-danger mt-2 error';
+                     }
                     throw new Error("No required .bin files found in the downloaded ZIP.");
                 }
 
@@ -1481,6 +1553,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 console.error("[Debug] Error loading or extracting GhostESP ZIP:", error);
                 espLoaderTerminal.writeLine(`❌ Error processing GhostESP ZIP: ${error.message}`);
                 extractedGhostEspFiles = null;
+                if (ghostEspStatusElem) {
+                    ghostEspStatusElem.textContent = `Error: ${error.message}`;
+                    ghostEspStatusElem.className = 'form-text text-danger mt-2 error';
+                }
                  if (appFileInfoElem) appFileInfoElem.textContent = 'ZIP Load Failed';
                  if (bootloaderFileInfoElem) bootloaderFileInfoElem.textContent = 'ZIP Load Failed';
                  if (partitionFileInfoElem) partitionFileInfoElem.textContent = 'ZIP Load Failed';
@@ -1737,143 +1813,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
 
-        // --- Modify loadGhostEspZip to update status element ---
-        async function loadGhostEspZip(zipUrl) {
-            console.log(`[Debug] loadGhostEspZip called with original URL: ${zipUrl}`);
-            if (!zipUrl) {
-                // ... (rest of the condition)
-                 if (ghostEspStatusElem) {
-                     ghostEspStatusElem.textContent = 'Select a variant to begin loading firmware files.';
-                     ghostEspStatusElem.className = 'form-text text-muted mt-2';
-                 }
-                return;
-            }
-
-            // --- Update Status UI ---
-             if (ghostEspStatusElem) {
-                 ghostEspStatusElem.textContent = 'Fetching ZIP from GitHub...';
-                 ghostEspStatusElem.className = 'form-text mt-2 loading'; // Add loading class
-             }
-
-            const proxyUrl = `https://fragrant-flower-ba0b.creepersbeast.workers.dev/?url=${encodeURIComponent(zipUrl)}`;
-            console.log(`[Debug] Using CF Worker proxy URL: ${proxyUrl}`);
-            espLoaderTerminal.writeLine(`Fetching GhostESP firmware via proxy from ${zipUrl}...`);
-
-            // Disable download during processing
-            if (choiceDownloadCard) choiceDownloadCard.style.pointerEvents = 'none';
-            extractedGhostEspFiles = null;
-
-            try {
-                console.log('[Debug] loadGhostEspZip: Starting fetch via proxy...');
-                const response = await fetch(proxyUrl);
-                console.log(`[Debug] loadGhostEspZip: Fetch response status: ${response.status}, ok: ${response.ok}`);
-
-                if (!response.ok) {
-                    // ... (error handling)
-                     if (ghostEspStatusElem) {
-                         ghostEspStatusElem.textContent = `Error fetching: ${response.status}`;
-                         ghostEspStatusElem.className = 'form-text text-danger mt-2 error';
-                     }
-                     throw new Error(proxyErrorDetails);
-                }
-
-                 if (ghostEspStatusElem) ghostEspStatusElem.textContent = 'Download complete. Extracting files...';
-
-                const zipBlob = await response.blob();
-                // ... (blob size/type checks) ...
-
-                espLoaderTerminal.writeLine(`Downloaded ${Math.round(zipBlob.size / 1024)} KB ZIP. Extracting...`);
-
-                console.log('[Debug] loadGhostEspZip: Loading ZIP with JSZip...');
-                const zip = await JSZip.loadAsync(zipBlob);
-                console.log('[Debug] loadGhostEspZip: JSZip loaded successfully.');
-
-                const filesToExtract = { // Updated filenames for gb_remote
-                    app: { name: 'gb_controller_lite.bin', data: null, elem: appFileInfoElem, addressInput: appAddressInput, type: 'Application' },
-                    bootloader: { name: 'bootloader.bin', data: null, elem: bootloaderFileInfoElem, addressInput: bootloaderAddressInput, type: 'Bootloader' },
-                    partition: { name: 'partition-table.bin', data: null, elem: partitionFileInfoElem, addressInput: partitionAddressInput, type: 'Partition' }
-                };
-
-                let foundCount = 0;
-                let foundFilesLog = []; // To log which files were found
-                console.log('[Debug] loadGhostEspZip: Starting file extraction loop...');
-                for (const key in filesToExtract) {
-                    const target = filesToExtract[key];
-                    console.log(`[Debug] loadGhostEspZip: Checking for file: ${target.name}`);
-
-                    // Try the primary name first
-                    let fileEntry = zip.file(target.name);
-
-                    // If not found, try alternative names for specific file types
-                    if (!fileEntry) {
-                        if (key === 'app') {
-                            fileEntry = zip.file('firmware.bin');
-                            if (fileEntry) target.name = 'firmware.bin';
-                        } else if (key === 'partition') {
-                            fileEntry = zip.file('partitions.bin');
-                            if (fileEntry) target.name = 'partitions.bin';
-                        }
-                    }
-
-                    if (fileEntry) {
-                        console.log(`[Debug] loadGhostEspZip: Found ${target.name}, extracting data...`);
-                        target.data = await fileEntry.async("arraybuffer");
-                        const fileSizeKB = Math.round(target.data.byteLength / 1024);
-                         console.log(`[Debug] loadGhostEspZip: Extracted ${target.name}, size: ${fileSizeKB} KB. Updating UI...`);
-                        if (target.elem) {
-                            target.elem.textContent = `${target.name} [Auto-Loaded]`;
-                            document.querySelector(`label[for="${target.elem.id.replace('Info', '')}"]`)?.classList.add('file-uploaded');
-                        }
-                        foundFilesLog.push(target.name);
-                        foundCount++;
-                    } else {
-                        console.log(`[Debug] loadGhostEspZip: ${target.name} not found in ZIP.`);
-                        if (target.elem) {
-                            target.elem.textContent = `${target.name} [Not Found]`;
-                            document.querySelector(`label[for="${target.elem.id.replace('Info', '')}"]`)?.classList.remove('file-uploaded');
-                        }
-                    }
-                }
-                console.log(`[Debug] loadGhostEspZip: Extraction loop finished. Found count: ${foundCount}`);
-
-                if (foundCount > 0) {
-                     extractedGhostEspFiles = filesToExtract;
-                     espLoaderTerminal.writeLine("Extraction complete. Files ready.");
-                      if (ghostEspStatusElem) { // Update status on success
-                          ghostEspStatusElem.textContent = `Loaded: ${foundFilesLog.join(', ')}`;
-                          ghostEspStatusElem.className = 'form-text text-success mt-2 success';
-                      }
-                     updateBinaryTypeIndicators();
-                     updateFlashSummary();
-                } else {
-                     clearExtractedData();
-                     updateFlashSummary();
-                      if (ghostEspStatusElem) { // Update status on failure
-                         ghostEspStatusElem.textContent = 'Error: No required .bin files found in ZIP.';
-                         ghostEspStatusElem.className = 'form-text text-danger mt-2 error';
-                     }
-                    throw new Error("No required .bin files found in the downloaded ZIP.");
-                }
-
-            } catch (error) {
-                console.error("[Debug] Error loading or extracting GhostESP ZIP:", error);
-                espLoaderTerminal.writeLine(`❌ Error processing GhostESP ZIP: ${error.message}`);
-                 if (ghostEspStatusElem) { // Update status on catch
-                     ghostEspStatusElem.textContent = `Error: ${error.message}`;
-                     ghostEspStatusElem.className = 'form-text text-danger mt-2 error';
-                 }
-                extractedGhostEspFiles = null;
-                 if (appFileInfoElem) appFileInfoElem.textContent = 'ZIP Load Failed';
-                 if (bootloaderFileInfoElem) bootloaderFileInfoElem.textContent = 'ZIP Load Failed';
-                 if (partitionFileInfoElem) partitionFileInfoElem.textContent = 'ZIP Load Failed';
-                 document.querySelectorAll('.custom-file-upload.file-uploaded').forEach(el => el.classList.remove('file-uploaded'));
-                 updateBinaryTypeIndicators(); // Clear badges on error
-            } finally {
-                console.log('[Debug] loadGhostEspZip: Finally block reached. Re-enabling select.');
-                 if (choiceDownloadCard) choiceDownloadCard.style.pointerEvents = 'auto';
-                updateButtonStates();
-            }
-        }
 
 
         // --- REMOVE OLD firmwareSourceSelect listener ---
